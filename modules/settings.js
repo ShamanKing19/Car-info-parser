@@ -1,17 +1,12 @@
 class Settings {
     fs = require('fs');
     ini = require('ini');
-    path = require('path');
 
     FILENAME = 'settings.ini';
 
 
-    constructor() {
-        this.createFileIfNotExists();
-    }
-
-
     get() {
+        this.createFileIfNotExists();
         let file = this.fs.readFileSync(this.FILENAME, 'utf-8');
         return this.ini.parse(file);
     }

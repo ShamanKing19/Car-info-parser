@@ -1,6 +1,30 @@
 class Functions {
     fs = require('fs');
     xlsx = require('xlsx');
+    axios = require('axios');
+    UserAgent = require('user-agents');
+
+
+    async get(url, params = {}, config = {}) {
+        const instance = this.axios.create();
+        config.params = params;
+        config.timeout = 5000;
+        config.headers = {
+            "User-agent": new this.UserAgent().toString(),
+        };
+
+        return await instance.get(url, config);
+    }
+
+    async post(url, data, config = {}) {
+        const instance = this.axios.create();
+        config.timeout = 5000;
+        config.headers = {
+            "User-agent": new this.UserAgent().toString(),
+        };
+
+        return await instance.post(url, data, config);
+    }
 
 
     /**

@@ -19,6 +19,9 @@ class Settings {
             let file = this.fs.readFileSync(this.FILENAME, 'utf-8');
 
             const defaultSettings = {
+                STARTUP: {
+                    START_FROM_VINS: "Y"
+                },
                 INPUT: {
                     DIRNAME: 'input',
                     VINS_FILE: 'vins.xlsx',
@@ -47,13 +50,7 @@ class Settings {
 
             this.fs.writeFileSync(this.FILENAME, this.ini.stringify(defaultSettings));
 
-
         }
-    }
-
-
-    getDefaultSettings() {
-
     }
 
 }

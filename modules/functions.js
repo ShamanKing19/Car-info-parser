@@ -5,6 +5,26 @@ class Functions {
     UserAgent = require('user-agents');
 
 
+    async tryGet(url, params = {}, config = {}) {
+        try {
+            return await this.get(url, params, config);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async tryPost(url, data, config = {}) {
+        const repeatTimes = 100;
+
+        for (let i = 0; i < repeatTimes; i++) {
+            try {
+                return await this.post(url, data, config);
+            } catch (e) {}
+        }
+
+        return false;
+    }
+
     async get(url, params = {}, config = {}) {
         const instance = this.axios.create();
         config.params = params;
@@ -24,6 +44,16 @@ class Functions {
         };
 
         return await instance.post(url, data, config);
+    }
+
+    /**
+     * Останавливает программу
+     *
+     * @param ms        Количество милисекунд
+     * @returns void
+     */
+    async sleep(ms) {
+        await new Promise(resolve => setTimeout(resolve, ms));
     }
 
 

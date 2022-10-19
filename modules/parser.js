@@ -1,14 +1,17 @@
 class Parser {
     Functions = require('./functions');
     Logger = require('./logger');
+    Autodoc = require('./autodoc');
+    Emex = require('./emex');
 
     settings;
+    autodoc;
+    emex;
 
     constructor(settings) {
         this.settings = settings;
         this.functions = new this.Functions();
         this.logger = new this.Logger();
-
     }
 
     async run() {
@@ -36,7 +39,13 @@ class Parser {
 
         if (useAutodocParser === "Y") {
             accounts = this.getAccounts(accountsFilePath);
+            this.autodoc = new this.Autodoc(accounts);
         }
+
+        if (useEmexParser === 'Y') {
+            this.emex = new this.Emex();
+        }
+
 
         const data = {
             VINS: vins,
@@ -65,7 +74,6 @@ class Parser {
                     const vin = row.VINS;
                     const vinRequest = this.parseVin(vin);
                     vinRequests.push(vinRequest);
-
                     break; // DEV
                 }
             }
@@ -75,21 +83,18 @@ class Parser {
         } else {
             // Тут на парсинг сразу отправляются детали
         }
+        console.log('Парсинг завершён!');
     }
 
 
     async parseVin(vin) {
         const clientId = Math.floor(Math.random() * 500);
         const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
-        let vinResponse;
 
-        // Первый запрос по vin
-        try {
-            vinResponse = await this.functions.get(carPrimaryInfoUrl);
-        } catch (e) {
-            this.logger.error(e);
-            return [];
-        }
+        const vinResponse = await this.functions.tryGet(carPrimaryInfoUrl);
+
+        if (!vinResponse) return [];
+
         const vinData = vinResponse.data;
         const primaryData = vinData['commonAttributes'];
         const modifications = vinData['specificAttributes'];
@@ -118,17 +123,13 @@ class Parser {
         const carId = carInfo['CarID'];
         const carSsd = carInfo['Ssd'];
         const carCatalog = carInfo['Catalog'];
-        const carModel = carInfo['Model'];
+        const carModel = carInfo['Model']; // Может быть пустым
 
         const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories?ssd=${carSsd}`;
 
-        let categoriesResponse;
-        try {
-            categoriesResponse = await this.functions.get(categoriesUrl);
-        } catch (e) {
-            this.logger.error(`Error at ${vin} ${categoriesUrl}`);
-            return [];
-        }
+        let categoriesResponse = await this.functions.tryGet(categoriesUrl);
+
+        if (!categoriesResponse) return [];
 
         let rawCategories = categoriesResponse.data;
 
@@ -139,24 +140,29 @@ class Parser {
         // Сохранение всех подкатегорий в один массив
         const categories = this.getSubcategories(rawCategories);
 
+        const categoryRequests = [];
         for (const category of categories) {
             const categoryId = category['categoryId'];
             const categorySsd = category['ssd'];
             const categoryName = category['name'];
 
             const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
-            let sparePartInfoResponse;
-            try {
-                sparePartInfoResponse = await this.functions.get(sparePartInfoUrl);
-            } catch (e) {
-                this.logger.error(`SparePartInfo error ${vin} ${sparePartInfoUrl}`);
-                continue;
-            }
 
-            const sparePartInfoData = sparePartInfoResponse.data;
-            const sparePartInfoItems = sparePartInfoData['items'];
+            const categoryRequest = this.functions.tryGet(sparePartInfoUrl);
+            categoryRequests.push(categoryRequest);
+        }
 
-            for (const sparePartItem of sparePartInfoItems) {
+        const categoryResponses = await Promise.all(categoryRequests);
+
+        const sparePartDetailInfoRequests = [];
+        for (const response of categoryResponses)
+        {
+            if (!response) continue;
+
+            const sparePartItems = response.data['items'];
+
+            for (const sparePartItem of sparePartItems) {
+
                 const unitId = sparePartItem['unitId'];
                 const unitSsd = sparePartItem['ssd'];
 
@@ -165,27 +171,44 @@ class Parser {
                     'Ssd': unitSsd
                 };
 
-                let sparePartDetailInfoResponse;
-
-                try {
-                    sparePartDetailInfoResponse = await this.functions.post(sparePartDetailInfoUrl, sparePartData);
-                } catch (e) {
-                    this.logger.error(`SparePartDetailInfo error ${vin} ${sparePartDetailInfoUrl}`);
-                    continue;
-                }
-
-                const partData = sparePartDetailInfoResponse.data;
-                const parts = partData['items'];
-
-                for (const part of parts) {
-                    const partName = part['name'];
-                    const partNumber = part['partNumber'];
-                    const partAttributes = part['attributes']; // Содержит характеристики детали (вес, семейство, количество)
-                }
+                const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData);
+                sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
             }
         }
 
-        return primaryData;
+        const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
+
+        const detailsInfo = [];
+        for (const response of sparePartDetailInfoResponses)
+        {
+            if (!response) continue;
+
+            const parts = response.data['items'];
+
+            if (!parts) continue;
+
+            for (const part of parts)
+            {
+                const partName = part['name'];
+                const partNumber = part['partNumber'];
+                const partAttributes = part['attributes']; // Содержит характеристики детали (вес, семейство, количество)
+
+                const partInfo = {
+                  PART_NAME: partName,
+                  PART_NUMBER: partNumber,
+                  PART_ATTRIBUTES: partAttributes
+                };
+
+                detailsInfo.push(partInfo);
+                // this.getDetailOffers(partInfo);
+            }
+        }
+
+        // await this.functions.createXLSX('output/test.xlsx', detailsInfo);
+    }
+
+    async getDetailOffers(detailInfo) {
+
     }
 
 
@@ -202,7 +225,6 @@ class Parser {
 
         return items;
     }
-
 
     getAccounts(filepath) {
         this.createAccountsFileIfNotExists(filepath);

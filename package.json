@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^1.1.3",
+    "cli-progress": "^3.11.2",
     "ini": "^3.0.1",
     "user-agents": "^1.0.1171",
     "xlsx": "^0.18.5"

@@ -17,5 +17,5 @@ class App {
 app = new App();
 
 (async () => {
-    app.parser.run();
+    app.parser.init();
 })();

@@ -14,7 +14,7 @@ class Parser {
         this.logger = new this.Logger();
     }
 
-    async run() {
+    async init() {
         const inputDirname = this.settings.INPUT.DIRNAME;
         const vinsFile = this.settings.INPUT.VINS_FILE;
         const detailsFile = this.settings.INPUT.DETAILS_FILE;
@@ -46,7 +46,6 @@ class Parser {
             this.emex = new this.Emex();
         }
 
-
         const data = {
             VINS: vins,
             DETAILS: details,
@@ -58,11 +57,13 @@ class Parser {
             EMEX: useEmexParser,
         };
 
-        await this.startParsing(data);
+        await this.run(data);
     }
 
 
-    async startParsing(data) {
+    async run(data) {
+        const multibar = this.functions.initMultibar();
+
         const vinRequests = [];
 
         if (data.START_FROM_VINS === 'Y')
@@ -71,14 +72,19 @@ class Parser {
             {
                 for (const row of data.VINS[sheet])
                 {
+                   const bar = multibar.create(1, 0, {
+                       speed: "N/A"
+                   });
+
                     const vin = row.VINS;
-                    const vinRequest = this.parseVin(vin);
+                    const vinRequest = this.parseVin(vin, bar);
                     vinRequests.push(vinRequest);
-                    break; // DEV
+                    // break; // DEV
                 }
             }
 
             const vinsData = await Promise.all(vinRequests);
+            multibar.stop();
 
         } else {
             // Тут на парсинг сразу отправляются детали
@@ -87,11 +93,12 @@ class Parser {
     }
 
 
-    async parseVin(vin) {
+    async parseVin(vin, pBar) {
         const clientId = Math.floor(Math.random() * 500);
         const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
 
-        const vinResponse = await this.functions.tryGet(carPrimaryInfoUrl);
+        const vinResponse = await this.functions.tryGet(carPrimaryInfoUrl, pBar);
+        pBar.update(0);
 
         if (!vinResponse) return [];
 
@@ -125,9 +132,10 @@ class Parser {
         const carCatalog = carInfo['Catalog'];
         const carModel = carInfo['Model']; // Может быть пустым
 
+        pBar.setTotal(1);
         const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories?ssd=${carSsd}`;
-
-        let categoriesResponse = await this.functions.tryGet(categoriesUrl);
+        const categoriesResponse = await this.functions.tryGet(categoriesUrl, pBar);
+        pBar.update(0);
 
         if (!categoriesResponse) return [];
 
@@ -139,8 +147,9 @@ class Parser {
 
         // Сохранение всех подкатегорий в один массив
         const categories = this.getSubcategories(rawCategories);
-
         const categoryRequests = [];
+        let categoryIterations = 0;
+
         for (const category of categories) {
             const categoryId = category['categoryId'];
             const categorySsd = category['ssd'];
@@ -148,18 +157,25 @@ class Parser {
 
             const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
 
-            const categoryRequest = this.functions.tryGet(sparePartInfoUrl);
+            const categoryRequest = this.functions.tryGet(sparePartInfoUrl, pBar);
             categoryRequests.push(categoryRequest);
+            categoryIterations++;
         }
 
+        pBar.setTotal(categoryIterations);
         const categoryResponses = await Promise.all(categoryRequests);
+        pBar.update(0);
 
         const sparePartDetailInfoRequests = [];
+        let detailsIterationCount = 0;
+
         for (const response of categoryResponses)
         {
             if (!response) continue;
 
             const sparePartItems = response.data['items'];
+
+            if (!sparePartItems) continue;
 
             for (const sparePartItem of sparePartItems) {
 
@@ -171,14 +187,18 @@ class Parser {
                     'Ssd': unitSsd
                 };
 
-                const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData);
+                const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData, pBar);
                 sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
+                detailsIterationCount++;
             }
         }
 
+        pBar.setTotal(detailsIterationCount);
         const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
 
+        const uniqueParts = [];
         const detailsInfo = [];
+
         for (const response of sparePartDetailInfoResponses)
         {
             if (!response) continue;
@@ -189,22 +209,25 @@ class Parser {
 
             for (const part of parts)
             {
-                const partName = part['name'];
+                // TODO: Походу приходит говно с какими-то символами, которые крашат excel и не отображаются в ячейках
                 const partNumber = part['partNumber'];
-                const partAttributes = part['attributes']; // Содержит характеристики детали (вес, семейство, количество)
+                const partName = part['name'];
 
-                const partInfo = {
-                  PART_NAME: partName,
-                  PART_NUMBER: partNumber,
-                  PART_ATTRIBUTES: partAttributes
-                };
+                // TODO: Выводить категорию
+                if (!uniqueParts.includes(partNumber)) {
+                    const partInfo = {
+                      PART_NAME: partName,
+                      PART_NUMBER: partNumber,
+                    };
 
-                detailsInfo.push(partInfo);
+                    detailsInfo.push(partInfo);
+                    uniqueParts.push(partNumber);
+                }
                 // this.getDetailOffers(partInfo);
             }
         }
 
-        // await this.functions.createXLSX('output/test.xlsx', detailsInfo);
+        await this.functions.createXLSX(`output/${vin}.xlsx`, detailsInfo);
     }
 
     async getDetailOffers(detailInfo) {

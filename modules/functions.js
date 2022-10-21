@@ -3,23 +3,48 @@ class Functions {
     xlsx = require('xlsx');
     axios = require('axios');
     UserAgent = require('user-agents');
+    CliProgress = require('cli-progress');
 
 
-    async tryGet(url, params = {}, config = {}) {
-        try {
-            return await this.get(url, params, config);
-        } catch (e) {
-            return false;
-        }
+    sleepTime = 500;
+
+
+    initMultibar() {
+        return new this.CliProgress.MultiBar({
+            clearOnComplete: false,
+            hideCursor: true
+        }, this.CliProgress.Presets.shades_grey);
     }
 
-    async tryPost(url, data, config = {}) {
-        const repeatTimes = 100;
+    async tryGet(url, pBar, params = {}, config = {}) {
+        const repeatTimes = 10;
+        let response;
 
         for (let i = 0; i < repeatTimes; i++) {
             try {
-                return await this.post(url, data, config);
-            } catch (e) {}
+                response = await this.get(url, params, config);
+                pBar.increment();
+                return response;
+            } catch (e) {
+                await this.sleep(this.sleepTime)
+            }
+        }
+
+        return false;
+    }
+
+    async tryPost(url, data, pBar, config = {}) {
+        const repeatTimes = 100;
+        let response;
+
+        for (let i = 0; i < repeatTimes; i++) {
+            try {
+                response = await this.post(url, data, config);
+                pBar.increment();
+                return response;
+            } catch (e) {
+                await this.sleep(this.sleepTime)
+            }
         }
 
         return false;
@@ -83,7 +108,7 @@ class Functions {
      * @param filepath  Путь до файла
      * @param data      Массив с объектами
      */
-    createXLSX(filepath, data) {
+    async createXLSX(filepath, data) {
         if (this.fs.existsSync(filepath)) return;
 
         const dirs = filepath.split('/');
@@ -93,8 +118,14 @@ class Functions {
         const xlsxData = this.xlsx.utils.json_to_sheet(data);
         const book = this.xlsx.utils.book_new();
 
+        const options = {
+            // type: 'buffer', // С этим тоже работает
+            type: 'string',
+            bookType: 'xlsx',
+        };
+
         this.xlsx.utils.book_append_sheet(book, xlsxData);
-        this.xlsx.writeFileXLSX(book, filepath);
+        await this.xlsx.writeFileAsync(filepath, book, options, () => {});
     }
 }
 

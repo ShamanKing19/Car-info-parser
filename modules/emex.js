@@ -1,11 +1,17 @@
 class Emex {
-    accounts;
+
 
     constructor() {
 
     }
 
-    getDetailOffers(detailInfo) {
+    /**
+     * Ищет предложения по номерам деталей
+     *
+     * @param detailInfo
+     * @param pBar
+     */
+    parseDetails(detailInfo, pBar, settings) {
 
     }
 

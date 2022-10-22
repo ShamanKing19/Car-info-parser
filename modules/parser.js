@@ -1,34 +1,34 @@
 class Parser {
-    Functions = require('./functions');
-    Logger = require('./logger');
-    Autodoc = require('./autodoc');
-    Emex = require('./emex');
-
-    settings;
+    vinsAndPartsObj = {}; // Для записи в один файл
     autodoc;
     emex;
 
-    vinsAndPartsObj = {}; // Для записи в один файл
 
-    constructor(settings) {
-        this.settings = settings;
-        this.functions = new this.Functions();
-        this.logger = new this.Logger();
+    constructor() {
+        this.functions = require(__dirname + '/functions');
+        this.logger = require(__dirname + '/logger');
     }
 
-    async init() {
-        const inputDirname = this.settings.INPUT.DIRNAME;
-        const vinsFile = this.settings.INPUT.VINS_FILE;
-        const detailsFile = this.settings.INPUT.DETAILS_FILE;
-        const accountsFile = this.settings.INPUT.ACCOUNTS;
 
-        const createVinsFile = this.settings.OUTPUT.CREATE_VINS_FILE;
-        const oneVinsFile = this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE;
+    /**
+     * Инициализация парсеров с учётом настроек
+     *
+     * @param settings  {Object}    Настройки для парсеров
+     * @returns {Promise<void>}
+     */
+    async init(settings) {
+        const inputDirname = settings.INPUT.DIRNAME;
+        const vinsFile = settings.INPUT.VINS_FILE;
+        const detailsFile = settings.INPUT.DETAILS_FILE;
+        const accountsFile = settings.INPUT.ACCOUNTS;
 
-        const startFromVins = this.settings.STARTUP.START_FROM_VINS;
+        const createVinsFile = settings.OUTPUT.CREATE_VINS_FILE;
+        const oneVinsFile = settings.OUTPUT.VINS_RESULT_IN_ONE_FILE;
 
-        const useAutodocParser = this.settings.PARSERS.AUTODOC;
-        const useEmexParser = this.settings.PARSERS.EMEX;
+        const startFromVins = settings.STARTUP.START_FROM_VINS;
+
+        const useAutodocParser = settings.PARSERS.AUTODOC;
+        const useEmexParser = settings.PARSERS.EMEX;
 
         const vinsFilePath = `${inputDirname}/${vinsFile}`.replaceAll('//', '/');
         const detailsFilePath = `${inputDirname}/${detailsFile}`.replaceAll('//', '/');
@@ -39,18 +39,18 @@ class Parser {
         let details = [];
 
         if (startFromVins === "Y") {
-            vins = this.getVins(vinsFilePath);
+            vins = await this.getVins(vinsFilePath);
         } else {
-            details = this.getDetails(detailsFilePath);
+            details = await this.getDetails(detailsFilePath);
         }
 
         if (useAutodocParser === "Y") {
-            accounts = this.getAccounts(accountsFilePath);
-            this.autodoc = new this.Autodoc(accounts);
+            accounts = await this.getAccounts(accountsFilePath);
+            this.autodoc = require('./autodoc');
         }
 
         if (useEmexParser === 'Y') {
-            this.emex = new this.Emex();
+            this.emex = require('./emex');
         }
 
         const data = {
@@ -66,255 +66,194 @@ class Parser {
             EMEX: useEmexParser,
         };
 
-        await this.run(data);
+        await this.startParsers(data);
     }
 
 
-    async run(data) {
+    /**
+     * Создаёт асинхронные задачи и прогресс бары для парсеров
+     *
+     * @param settings  {Object}    Настройки для парсеров
+     * @returns {Promise<void>}
+     */
+    async startParsers(settings) {
         const multibar = this.functions.initMultibar();
         const vinRequests = [];
 
-        if (data.START_FROM_VINS === 'Y')
+        if (settings.START_FROM_VINS === 'Y')
         {
-            for (const sheet in data.VINS)
+            for (const sheet in settings.VINS)
             {
-                for (const row of data.VINS[sheet])
+                for (const row of settings.VINS[sheet])
                 {
-                   const bar = multibar.create(1, 0, {
-                       speed: "N/A"
-                   });
-
                     const vin = row.VINS;
-                    const vinRequest = this.parseVin(vin, bar, data);
-                    vinRequests.push(vinRequest);
+                    const bar = multibar.create(1, 0, {
+                        speed: "N/A"
+                    });
+
+                    vinRequests.push(this.parseVins(vin, bar, settings));
                 }
             }
 
             const vinsData = await Promise.all(vinRequests);
             multibar.stop();
 
-            if (data.VINS_RESULT_IN_ONE_FILE === 'Y') {
+            if (settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = new Date().toISOString().split('T')[0];
-                await this.functions.createXLSX(`output/${date} VINS.xlsx`, this.vinsAndPartsObj);
+                await this.functions.createXLSXAsync(`output/${date} VINS.xlsx`, this.vinsAndPartsObj);
+            }
+        } else {
+            const detailSheets = settings.DETAILS;
+            const detailsRequests = [];
+
+            for (const sheet in detailSheets) {
+                const vin = sheet;
+                const details = detailSheets[sheet];
+                const bar = multibar.create(1, 0, {
+                    speed: "N/A"
+                });
+
+                detailsRequests.push(this.parseDetails(vin, details, bar));
             }
 
-        } else {
-            // Тут на парсинг сразу отправляются детали
+            const details = await Promise.all(detailsRequests);
         }
         console.log('Парсинг завершён!');
     }
 
 
-    async parseVin(vin, pBar, settings) {
-        const clientId = Math.floor(Math.random() * 500);
-        const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
+    /**
+     * Сначала ищет набор деталей по VIN номеру, а потом предложения о покупке
+     *
+     * @param vin       {string}        VIN номер
+     * @param pBar      {GenericBar}    Progress bar
+     * @param settings  {Object}        Настройки
+     * @returns {Promise<void>}
+     */
+    async parseVins(vin, pBar, settings) {
 
-        const vinResponse = await this.functions.tryGet(carPrimaryInfoUrl, pBar);
-        pBar.update(0);
+        const detailsInfo = await this.autodoc.parseVin(vin, pBar);
 
-        if (!vinResponse) return [];
-
-        const vinData = vinResponse.data;
-        const primaryData = vinData['commonAttributes'];
-        const modifications = vinData['specificAttributes'];
-
-        if (!primaryData) {
-            this.logger.log(`No primary data at ${vin}`);
-            return [];
-        }
-
-
-        // TODO: Тут можно собирать инфу по разным модификациям автомобиля (пока что беру только первую)
-        if (Array.isArray(modifications) && modifications.length > 0) {
-            for (const item of modifications[0]['attributes']) {
-                primaryData.push(item);
-            }
-        }
-
-        const carInfo = {};
-
-        // Формирование удобного объекта из полученных данных
-        for (const property of primaryData) {
-            carInfo[property['key']] = property['value'];
-        }
-
-        // Получение категорий автомобиля
-        const carId = carInfo['CarID'];
-        const carSsd = carInfo['Ssd'];
-        const carCatalog = carInfo['Catalog'];
-        const carModel = carInfo['Model']; // Может быть пустым
-
-        pBar.setTotal(1);
-        const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories?ssd=${carSsd}`;
-        const categoriesResponse = await this.functions.tryGet(categoriesUrl, pBar);
-        pBar.update(0);
-
-        if (!categoriesResponse) return [];
-
-        let rawCategories = categoriesResponse.data;
-
-        if ('items' in rawCategories) {
-           rawCategories = rawCategories['items'];
-        }
-
-        // Сохранение всех подкатегорий в один массив
-        const categories = this.getSubcategories(rawCategories);
-        const categoryRequests = [];
-        let categoryIterations = 0;
-
-        for (const category of categories) {
-            const categoryId = category['categoryId'];
-            const categorySsd = category['ssd'];
-            const categoryName = category['name'];
-
-            const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
-
-            // TODO: Здесь подцеплять название категории categoryName
-            const categoryRequest = this.functions.tryGet(sparePartInfoUrl, pBar);
-            categoryRequests.push(categoryRequest);
-            categoryIterations++;
-        }
-
-        pBar.setTotal(categoryIterations);
-        const categoryResponses = await Promise.all(categoryRequests);
-        pBar.update(0);
-
-        const sparePartDetailInfoRequests = [];
-        let detailsIterationCount = 0;
-
-        for (const response of categoryResponses)
+        if (settings.CREATE_VINS_FILE === 'Y')
         {
-            if (!response) continue;
-            const sparePartItems = response.data['items'];
-            if (!sparePartItems) continue;
-
-            for (const sparePartItem of sparePartItems)
-            {
-                const unitId = sparePartItem['unitId'];
-                const unitSsd = sparePartItem['ssd'];
-
-                const sparePartDetailInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/units/${unitId}/spareparts?ssd=${unitSsd}`;
-                const sparePartData = {'Ssd': unitSsd};
-
-                const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData, pBar);
-                sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
-                detailsIterationCount++;
-            }
-        }
-
-        pBar.setTotal(detailsIterationCount);
-        const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
-        pBar.update(0);
-
-        const uniqueParts = [];
-        const detailsInfo = [];
-
-        for (const response of sparePartDetailInfoResponses)
-        {
-            if (!response) continue;
-            const parts = response.data['items'];
-            if (!parts) continue;
-
-            for (const part of parts)
-            {
-                // TODO: Походу приходит говно с какими-то символами, которые крашат excel и не отображаются в ячейках
-                const partNumber = part['partNumber'];
-                const partName = part['name'];
-
-                // TODO: Выводить категорию
-                if (!uniqueParts.includes(partNumber)) {
-                    const partInfo = {
-                      PART_NAME: partName,
-                      PART_NUMBER: partNumber,
-                    };
-
-                    detailsInfo.push(partInfo);
-                    uniqueParts.push(partNumber);
-                }
-            }
-        }
-
-        if (settings.CREATE_VINS_FILE === 'Y') {
             const date = new Date().toISOString().split('T')[0];
+
             if (settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 this.vinsAndPartsObj[vin] = detailsInfo;
             } else {
-                await this.functions.createXLSX(`output/${date} ${vin} details.xlsx`, {vin: detailsInfo});
+                const outputList = {};
+                outputList[vin] = detailsInfo;
+                await this.functions.createXLSXAsync(`output/${date} ${vin} details.xlsx`, outputList);
             }
         }
 
-        const detailOffers = await this.getDetailOffers(detailsInfo, settings);
+        const detailOffers = await this.parseDetails(vin, detailsInfo, pBar);
+    }
+
+    /**
+     * Запускает парсеры деталей
+     *
+     * @param vin       {string}        VIN номер
+     * @param details   {Object[]}      Массив с деталями
+     * @param pBar      {GenericBar}
+     * @returns {Promise<void>}
+     */
+    async parseDetails(vin, details, pBar) {
 
     }
 
-    async getDetailOffers(detailInfo, settings) {
 
-    }
-
-
-    parseDetails(vin, bar, data) {
-
-    }
-
-    getSubcategories(categories) {
-        let items = [];
-
-        for (const category of categories) {
-            if (category['children'].length !== 0) {
-                items = items.concat(this.getSubcategories(category['children']))
-            } else {
-                items.push(category);
-            }
-        }
-
-        return items;
-    }
-
-    getAccounts(filepath) {
-        this.createAccountsFileIfNotExists(filepath);
+    /**
+     * Читает файл с аккаунтами для autodoc.ru
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<Object[]>}
+     */
+    async getAccounts(filepath) {
+        await this.createAccountsFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
     }
 
-    getVins(filepath) {
-        this.createVinsInputFileIfNotExists(filepath);
+
+    /**
+     * Читает файл с VIN номерами
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<Object[]>}
+     */
+    async getVins(filepath) {
+        await this.createVinsInputFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
     }
 
-    getDetails(filepath) {
-        this.createDetailsInputFileIfNotExists(filepath);
+    /**
+     * Читает файл с деталями
+     *
+     * @param filepath  {string}    Путь к фалу
+     * @returns {Promise<Object[]>}
+     */
+    async getDetails(filepath) {
+        await this.createDetailsInputFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
     }
 
-    createVinsInputFileIfNotExists(filepath) {
-        const headers = [
-            {
-                'VINS': ''
-            }
-        ];
-        this.functions.createXLSX(filepath, headers);
+
+    /**
+     * Создаёт файл с VIN номерами если его нет
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<void>}
+     */
+    async createVinsInputFileIfNotExistsAsync(filepath) {
+        const headers = {
+            'VINS': [
+                {
+                    'VINS': ''
+                }
+            ]
+        };
+        await this.functions.createXLSXAsync(filepath, headers);
     }
 
-    createDetailsInputFileIfNotExists(filepath) {
-        const headers = [
-            {
-                'CATEGORY': '',
-                'DETAIL_NAME': '',
-                'DETAIL_NUMBER': ''
-            }
-        ];
-        this.functions.createXLSX(filepath, headers);
+
+    /**
+     * Создаёт файл с деталями если его нет
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<void>}
+     */
+    async createDetailsInputFileIfNotExistsAsync(filepath) {
+        const headers = {
+            'DETAILS' : [
+                {
+                    'CATEGORY': '',
+                    'DETAIL_NAME': '',
+                    'DETAIL_NUMBER': ''
+                }
+            ]
+        };
+        await this.functions.createXLSXAsync(filepath, headers);
     }
 
-    createAccountsFileIfNotExists(filepath) {
-        const headers = [
-            {
-                'LOGIN': '',
-                'PASSWORD': '',
-            }
-        ];
-        this.functions.createXLSX(filepath, headers);
+
+    /**
+     * Создаёт файл с аккаутнами если его нет
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<void>}
+     */
+    async createAccountsFileIfNotExistsAsync(filepath) {
+        const headers = {
+            'ACCOUNTS': [
+                {
+                    'LOGIN': '',
+                    'PASSWORD': ''
+                }
+            ]
+        };
+        await this.functions.createXLSXAsync(filepath, headers);
     }
 
 }
 
-module.exports = Parser;
+module.exports = new Parser();

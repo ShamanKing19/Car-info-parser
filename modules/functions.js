@@ -5,10 +5,13 @@ class Functions {
     UserAgent = require('user-agents');
     CliProgress = require('cli-progress');
 
-
     sleepTime = 500;
 
-
+    /**
+     * Создаёт объект для последующего создания множественных прогресс баров
+     *
+     * @returns {MultiBar}
+     */
     initMultibar() {
         return new this.CliProgress.MultiBar({
             clearOnComplete: false,
@@ -16,8 +19,18 @@ class Functions {
         }, this.CliProgress.Presets.shades_grey);
     }
 
+
+    /**
+     * Делает несколько попыток запроса по URL. Если ответ не будет получен возвращает false
+     *
+     * @param url       {string}        Строка запроса
+     * @param pBar      {GenericBar}    Прогресс бар
+     * @param params    {Object}        Параметры запроса
+     * @param config    {Object}        Кастомный конфиг для запроса
+     * @returns {Promise<AxiosResponse<any>|boolean>}
+     */
     async tryGet(url, pBar, params = {}, config = {}) {
-        const repeatTimes = 10;
+        const repeatTimes = 20;
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {
@@ -33,6 +46,16 @@ class Functions {
         return false;
     }
 
+
+    /**
+     * Делает несколько попыток запроса по URL. Если ответ не будет получен возвращает false
+     *
+     * @param url       {string}        Строка запроса
+     * @param pBar      {GenericBar}    Прогресс бар
+     * @param data      {Object}        Тело запроса
+     * @param config    {Object}        Кастомный конфиг для запроса
+     * @returns {Promise<AxiosResponse<any>|boolean>}
+     */
     async tryPost(url, data, pBar, config = {}) {
         const repeatTimes = 100;
         let response;
@@ -50,6 +73,15 @@ class Functions {
         return false;
     }
 
+
+    /**
+     * GET запрос с параметрами и стандартным таймаутом в 5 секунд
+     *
+     * @param url       {string}    Строка запроса
+     * @param params    {Object}    Параметры запроса
+     * @param config    {Object}    Кастомный конфиг
+     * @returns {Promise<AxiosResponse<any>>}
+     */
     async get(url, params = {}, config = {}) {
         const instance = this.axios.create();
         config.params = params;
@@ -61,6 +93,15 @@ class Functions {
         return await instance.get(encodeURI(url), config);
     }
 
+
+    /**
+     * POST запрос с параметрами и стандартным таймаутом в 5 секунд
+     *
+     * @param url       {string}    Строка запроса
+     * @param data      {{Object}}  Тело запроса
+     * @param config    {{Object}}  Кастомный конфиг
+     * @returns {Promise<AxiosResponse<any>>}
+     */
     async post(url, data, config = {}) {
         const instance = this.axios.create();
         config.timeout = 5000;
@@ -71,10 +112,11 @@ class Functions {
         return await instance.post(encodeURI(url), data, config);
     }
 
+
     /**
      * Останавливает программу
      *
-     * @param ms        Количество милисекунд
+     * @param ms        {int}   Количество милисекунд
      * @returns void
      */
     async sleep(ms) {
@@ -85,13 +127,13 @@ class Functions {
     /**
      * Читает .xlsx файл постранично и возвращает объект
      *
-     * @param filepath  Путь до файла
-     * @returns {*[]}   Массив с объектами
+     * @param filepath  {string}  Путь до файла
+     * @returns {[Object]}   Массив с объектами
      */
     readXLSX(filepath) {
         const file = this.xlsx.readFile(filepath);
         const sheets = file.Sheets;
-        let data = [];
+        const data = [];
 
         for (const sheetName in sheets) {
             const sheet = sheets[sheetName];
@@ -105,10 +147,10 @@ class Functions {
     /**
      * Создаёт .xlsx файл если его не существует
      *
-     * @param filepath  Путь до файла
-     * @param data      Массив с объектами
+     * @param filepath  {string} Путь до файла
+     * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
      */
-    async createXLSX(filepath, data) {
+    async createXLSXAsync(filepath, data) {
         if (this.fs.existsSync(filepath)) return;
 
         const dirs = filepath.split('/');
@@ -123,18 +165,13 @@ class Functions {
             bookType: 'xlsx',
         };
 
-        if (Array.isArray(data)) {
-            const xlsxData = this.xlsx.utils.json_to_sheet(data);
-            this.xlsx.utils.book_append_sheet(book, xlsxData);
-        } else if (typeof data === 'object') {
-            for (const page in data) {
-                const xlsxData = this.xlsx.utils.json_to_sheet(data[page]);
-                this.xlsx.utils.book_append_sheet(book, xlsxData, page);
-            }
+        for (const page in data) {
+            const xlsxData = this.xlsx.utils.json_to_sheet(data[page]);
+            this.xlsx.utils.book_append_sheet(book, xlsxData, page);
         }
 
         await this.xlsx.writeFileAsync(filepath, book, options, () => {});
     }
 }
 
-module.exports = Functions;
+module.exports = new Functions();

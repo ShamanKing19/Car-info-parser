@@ -1,21 +1,16 @@
 class App {
-    Parser = require("./modules/parser");
-    Logger = require("./modules/logger");
-    Settings = require("./modules/settings");
-
 
     constructor() {
-        const settings = new this.Settings().get();
-        const logger = new this.Logger(settings);
-        this.parser = new this.Parser(settings);
+        this.settings = require('./modules/settings').get();
+        this.logger = require('./modules/logger');
+        this.parser = require('./modules/parser');
     }
 
 }
 
 
-
-app = new App();
-
 (async () => {
-    app.parser.init();
+    const app = new App();
+    const settings = app.settings;
+    await app.parser.init(settings);
 })();

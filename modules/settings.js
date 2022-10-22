@@ -5,6 +5,11 @@ class Settings {
     FILENAME = 'settings.ini';
 
 
+    /**
+     * Читает файл с настройками
+     *
+     * @returns {Object}
+     */
     get() {
         this.createFileIfNotExists();
         let file = this.fs.readFileSync(this.FILENAME, 'utf-8');
@@ -12,6 +17,9 @@ class Settings {
     }
 
 
+    /**
+     * Создаёт файл с настройками
+     */
     createFileIfNotExists() {
         if (!this.fs.existsSync(this.FILENAME)) {
             this.fs.writeFileSync(this.FILENAME, '');
@@ -54,4 +62,4 @@ class Settings {
 
 }
 
-module.exports = Settings;
+module.exports = new Settings();

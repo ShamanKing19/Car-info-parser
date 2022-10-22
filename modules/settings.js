@@ -16,8 +16,6 @@ class Settings {
         if (!this.fs.existsSync(this.FILENAME)) {
             this.fs.writeFileSync(this.FILENAME, '');
 
-            let file = this.fs.readFileSync(this.FILENAME, 'utf-8');
-
             const defaultSettings = {
                 STARTUP: {
                     START_FROM_VINS: "Y"
@@ -30,9 +28,10 @@ class Settings {
                 },
                 OUTPUT: {
                     DIRNAME: 'output',
-                    COUNT_AVERAGE_PRICE: 'Y',
-                    VINS_RESULT_IN_ONE_FILE: 'Y',
+                    CREATE_VINS_FILE: 'Y',
+                    VINS_RESULT_IN_ONE_FILE: 'N',
                     DETAILS_RESULT_IN_ONE_FILE: 'N',
+                    COUNT_AVERAGE_PRICE: 'Y',
                 },
                 SETTINGS: {
                     DELIVERY_LIMIT: 30,

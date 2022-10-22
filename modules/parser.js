@@ -8,6 +8,8 @@ class Parser {
     autodoc;
     emex;
 
+    vinsAndPartsObj = {}; // Для записи в один файл
+
     constructor(settings) {
         this.settings = settings;
         this.functions = new this.Functions();
@@ -19,7 +21,12 @@ class Parser {
         const vinsFile = this.settings.INPUT.VINS_FILE;
         const detailsFile = this.settings.INPUT.DETAILS_FILE;
         const accountsFile = this.settings.INPUT.ACCOUNTS;
+
+        const createVinsFile = this.settings.OUTPUT.CREATE_VINS_FILE;
+        const oneVinsFile = this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE;
+
         const startFromVins = this.settings.STARTUP.START_FROM_VINS;
+
         const useAutodocParser = this.settings.PARSERS.AUTODOC;
         const useEmexParser = this.settings.PARSERS.EMEX;
 
@@ -52,6 +59,8 @@ class Parser {
             ACCOUNTS: accounts,
 
             START_FROM_VINS: startFromVins,
+            CREATE_VINS_FILE: createVinsFile,
+            VINS_RESULT_IN_ONE_FILE: oneVinsFile,
 
             AUTODOC: useAutodocParser,
             EMEX: useEmexParser,
@@ -63,7 +72,6 @@ class Parser {
 
     async run(data) {
         const multibar = this.functions.initMultibar();
-
         const vinRequests = [];
 
         if (data.START_FROM_VINS === 'Y')
@@ -77,14 +85,18 @@ class Parser {
                    });
 
                     const vin = row.VINS;
-                    const vinRequest = this.parseVin(vin, bar);
+                    const vinRequest = this.parseVin(vin, bar, data);
                     vinRequests.push(vinRequest);
-                    // break; // DEV
                 }
             }
 
             const vinsData = await Promise.all(vinRequests);
             multibar.stop();
+
+            if (data.VINS_RESULT_IN_ONE_FILE === 'Y') {
+                const date = new Date().toISOString().split('T')[0];
+                await this.functions.createXLSX(`output/${date} VINS.xlsx`, this.vinsAndPartsObj);
+            }
 
         } else {
             // Тут на парсинг сразу отправляются детали
@@ -93,7 +105,7 @@ class Parser {
     }
 
 
-    async parseVin(vin, pBar) {
+    async parseVin(vin, pBar, settings) {
         const clientId = Math.floor(Math.random() * 500);
         const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
 
@@ -157,6 +169,7 @@ class Parser {
 
             const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
 
+            // TODO: Здесь подцеплять название категории categoryName
             const categoryRequest = this.functions.tryGet(sparePartInfoUrl, pBar);
             categoryRequests.push(categoryRequest);
             categoryIterations++;
@@ -172,20 +185,16 @@ class Parser {
         for (const response of categoryResponses)
         {
             if (!response) continue;
-
             const sparePartItems = response.data['items'];
-
             if (!sparePartItems) continue;
 
-            for (const sparePartItem of sparePartItems) {
-
+            for (const sparePartItem of sparePartItems)
+            {
                 const unitId = sparePartItem['unitId'];
                 const unitSsd = sparePartItem['ssd'];
 
                 const sparePartDetailInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/units/${unitId}/spareparts?ssd=${unitSsd}`;
-                const sparePartData = {
-                    'Ssd': unitSsd
-                };
+                const sparePartData = {'Ssd': unitSsd};
 
                 const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData, pBar);
                 sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
@@ -195,6 +204,7 @@ class Parser {
 
         pBar.setTotal(detailsIterationCount);
         const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
+        pBar.update(0);
 
         const uniqueParts = [];
         const detailsInfo = [];
@@ -202,9 +212,7 @@ class Parser {
         for (const response of sparePartDetailInfoResponses)
         {
             if (!response) continue;
-
             const parts = response.data['items'];
-
             if (!parts) continue;
 
             for (const part of parts)
@@ -223,17 +231,30 @@ class Parser {
                     detailsInfo.push(partInfo);
                     uniqueParts.push(partNumber);
                 }
-                // this.getDetailOffers(partInfo);
             }
         }
 
-        await this.functions.createXLSX(`output/${vin}.xlsx`, detailsInfo);
+        if (settings.CREATE_VINS_FILE === 'Y') {
+            const date = new Date().toISOString().split('T')[0];
+            if (settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
+                this.vinsAndPartsObj[vin] = detailsInfo;
+            } else {
+                await this.functions.createXLSX(`output/${date} ${vin} details.xlsx`, {vin: detailsInfo});
+            }
+        }
+
+        const detailOffers = await this.getDetailOffers(detailsInfo, settings);
+
     }
 
-    async getDetailOffers(detailInfo) {
+    async getDetailOffers(detailInfo, settings) {
 
     }
 
+
+    parseDetails(vin, bar, data) {
+
+    }
 
     getSubcategories(categories) {
         let items = [];

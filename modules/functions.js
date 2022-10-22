@@ -58,7 +58,7 @@ class Functions {
             "User-agent": new this.UserAgent().toString(),
         };
 
-        return await instance.get(url, config);
+        return await instance.get(encodeURI(url), config);
     }
 
     async post(url, data, config = {}) {
@@ -68,7 +68,7 @@ class Functions {
             "User-agent": new this.UserAgent().toString(),
         };
 
-        return await instance.post(url, data, config);
+        return await instance.post(encodeURI(url), data, config);
     }
 
     /**
@@ -115,7 +115,6 @@ class Functions {
         const filename = dirs.pop();
         this.fs.mkdirSync(dirs.join('/'), {recursive: true});
 
-        const xlsxData = this.xlsx.utils.json_to_sheet(data);
         const book = this.xlsx.utils.book_new();
 
         const options = {
@@ -124,7 +123,16 @@ class Functions {
             bookType: 'xlsx',
         };
 
-        this.xlsx.utils.book_append_sheet(book, xlsxData);
+        if (Array.isArray(data)) {
+            const xlsxData = this.xlsx.utils.json_to_sheet(data);
+            this.xlsx.utils.book_append_sheet(book, xlsxData);
+        } else if (typeof data === 'object') {
+            for (const page in data) {
+                const xlsxData = this.xlsx.utils.json_to_sheet(data[page]);
+                this.xlsx.utils.book_append_sheet(book, xlsxData, page);
+            }
+        }
+
         await this.xlsx.writeFileAsync(filepath, book, options, () => {});
     }
 }

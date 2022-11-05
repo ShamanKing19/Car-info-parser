@@ -18,7 +18,7 @@ class Logger {
             });
         }
 
-        this.fs.writeFile(`${dirPath}/${filename}.json`, JSON.stringify(data), 'utf-8', () => {});
+        await this.fs.writeFile(`${dirPath}/${filename}.json`, JSON.stringify(data), 'utf-8', () => {});
     }
 
     logHtml(filename, data) {

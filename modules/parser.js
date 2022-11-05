@@ -34,76 +34,67 @@ class Parser {
         const detailsFilePath = `${inputDirname}/${detailsFile}`.replaceAll('//', '/');
         const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
 
+        this.settings = settings;
+
         let vins = [];
         let accounts = [];
         let details = [];
 
         if (startFromVins === "Y") {
+            this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
+            this.autodoc.settings = settings;
             vins = await this.getVins(vinsFilePath);
         } else {
             details = await this.getDetails(detailsFilePath);
         }
 
         if (useAutodocParser === "Y") {
+            this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
             accounts = await this.getAccounts(accountsFilePath);
-            this.autodoc = require('./autodoc');
+            this.autodoc.settings = settings;
         }
 
         if (useEmexParser === 'Y') {
             this.emex = require('./emex');
+            this.emex.settings = settings;
         }
 
-        const data = {
-            VINS: vins,
-            DETAILS: details,
-            ACCOUNTS: accounts,
-
-            START_FROM_VINS: startFromVins,
-            CREATE_VINS_FILE: createVinsFile,
-            VINS_RESULT_IN_ONE_FILE: oneVinsFile,
-
-            AUTODOC: useAutodocParser,
-            EMEX: useEmexParser,
-        };
-
-        await this.startParsers(data);
+        await this.startParsers(vins, details, accounts);
     }
 
 
     /**
      * Создаёт асинхронные задачи и прогресс бары для парсеров
      *
-     * @param settings  {Object}    Настройки для парсеров
      * @returns {Promise<void>}
      */
-    async startParsers(settings) {
+    async startParsers(vins, details, accounts) {
         const multibar = this.functions.initMultibar();
         const vinRequests = [];
 
-        if (settings.START_FROM_VINS === 'Y')
+        if (this.settings.STARTUP.START_FROM_VINS === 'Y')
         {
-            for (const sheet in settings.VINS)
+            for (const sheet in vins)
             {
-                for (const row of settings.VINS[sheet])
+                for (const row of vins[sheet])
                 {
                     const vin = row.VINS;
                     const bar = multibar.create(1, 0, {
                         speed: "N/A"
                     });
-
-                    vinRequests.push(this.parseVins(vin, bar, settings));
+                    vinRequests.push(this.parseVins(vin, bar));
                 }
             }
 
             const vinsData = await Promise.all(vinRequests);
             multibar.stop();
 
-            if (settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
+            if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = new Date().toISOString().split('T')[0];
                 await this.functions.createXLSXAsync(`output/${date} VINS.xlsx`, this.vinsAndPartsObj);
             }
         } else {
-            const detailSheets = settings.DETAILS;
+            const detailSheets = this.settings.DETAILS;
             const detailsRequests = [];
 
             for (const sheet in detailSheets) {
@@ -127,18 +118,16 @@ class Parser {
      *
      * @param vin       {string}        VIN номер
      * @param pBar      {GenericBar}    Progress bar
-     * @param settings  {Object}        Настройки
      * @returns {Promise<void>}
      */
-    async parseVins(vin, pBar, settings) {
-
+    async parseVins(vin, pBar) {
         const detailsInfo = await this.autodoc.parseVin(vin, pBar);
 
-        if (settings.CREATE_VINS_FILE === 'Y')
+        if (this.settings.CREATE_VINS_FILE === 'Y')
         {
             const date = new Date().toISOString().split('T')[0];
 
-            if (settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
+            if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 this.vinsAndPartsObj[vin] = detailsInfo;
             } else {
                 const outputList = {};
@@ -155,11 +144,21 @@ class Parser {
      *
      * @param vin       {string}        VIN номер
      * @param details   {Object[]}      Массив с деталями
-     * @param pBar      {GenericBar}
+     * @param pBar      {GenericBar}    Progress bar
      * @returns {Promise<void>}
      */
     async parseDetails(vin, details, pBar) {
+        const detailsRequests = [];
 
+        if (this.settings.PARSERS.EMEX === 'Y') {
+            detailsRequests.push(this.emex.getDetailOffers(details, pBar));
+        }
+        if (this.settings.PARSERS.AUTODOC === 'Y') {
+            detailsRequests.push(this.autodoc.getDetailOffers(details, pBar));
+        }
+
+        const results = await Promise.all(detailsRequests);
+        this.logger.json('offers', results);
     }
 
 

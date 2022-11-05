@@ -1,5 +1,6 @@
 class Autodoc {
     accounts;
+    settings;
 
     constructor(accounts) {
         this.accounts = accounts;

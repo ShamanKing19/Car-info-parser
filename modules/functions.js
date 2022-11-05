@@ -30,7 +30,7 @@ class Functions {
      * @returns {Promise<AxiosResponse<any>|boolean>}
      */
     async tryGet(url, pBar, params = {}, config = {}) {
-        const repeatTimes = 20;
+        const repeatTimes = 1; // При 10 работает хорошо
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {
@@ -85,10 +85,14 @@ class Functions {
     async get(url, params = {}, config = {}) {
         const instance = this.axios.create();
         config.params = params;
-        config.timeout = 5000;
-        config.headers = {
-            "User-agent": new this.UserAgent().toString(),
-        };
+        if (!('timeout' in config)) {
+            config['timeout'] = 3000;
+        }
+        if (!('headers' in config)) {
+            config['headers'] = {
+                "User-agent": this.getUserAgent(),
+            };
+        }
 
         return await instance.get(encodeURI(url), config);
     }
@@ -104,10 +108,14 @@ class Functions {
      */
     async post(url, data, config = {}) {
         const instance = this.axios.create();
-        config.timeout = 5000;
-        config.headers = {
-            "User-agent": new this.UserAgent().toString(),
-        };
+        if (!('timeout' in config)) {
+            config['timeout'] = 3000;
+        }
+        if (!('headers' in config)) {
+            config['headers'] = {
+                "User-agent": this.getUserAgent(),
+            };
+        }
 
         return await instance.post(encodeURI(url), data, config);
     }
@@ -171,6 +179,16 @@ class Functions {
         }
 
         await this.xlsx.writeFileAsync(filepath, book, options, () => {});
+    }
+
+
+    /**
+     * Генерирует случайный User-agent
+     *
+     * @returns {string}
+     */
+    getUserAgent() {
+        return new this.UserAgent().toString();
     }
 }
 

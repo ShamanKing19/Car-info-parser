@@ -20,7 +20,7 @@ class Autodoc {
         const clientId = Math.floor(Math.random() * 500);
         const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
 
-        const vinResponse = await this.functions.tryGet(carPrimaryInfoUrl, pBar);
+        const vinResponse = await this.makeGetRequest(carPrimaryInfoUrl, pBar);
         pBar.update(0);
 
         if (!vinResponse) return [];
@@ -57,7 +57,7 @@ class Autodoc {
 
         pBar.setTotal(1);
         const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories?ssd=${carSsd}`;
-        const categoriesResponse = await this.functions.tryGet(categoriesUrl, pBar);
+        const categoriesResponse = await this.makeGetRequest(categoriesUrl, pBar);
         pBar.update(0);
 
         if (!categoriesResponse) return [];
@@ -71,7 +71,6 @@ class Autodoc {
         // Сохранение всех подкатегорий в один массив
         const categories = this.getSubcategories(rawCategories);
         const categoryRequests = [];
-        let categoryIterations = 0;
 
         for (const category of categories) {
             const categoryId = category['categoryId'];
@@ -81,12 +80,11 @@ class Autodoc {
             const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
 
             // TODO: Здесь подцеплять название категории categoryName
-            const categoryRequest = this.functions.tryGet(sparePartInfoUrl, pBar);
+            const categoryRequest = this.makeGetRequest(sparePartInfoUrl, pBar);
             categoryRequests.push(categoryRequest);
-            categoryIterations++;
         }
 
-        pBar.setTotal(categoryIterations);
+        pBar.setTotal(categories.length);
         const categoryResponses = await Promise.all(categoryRequests);
         pBar.update(0);
 
@@ -107,7 +105,7 @@ class Autodoc {
                 const sparePartDetailInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/units/${unitId}/spareparts?ssd=${unitSsd}`;
                 const sparePartData = {'Ssd': unitSsd};
 
-                const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData, pBar);
+                const sparePartDetailInfoRequest = this.makePostRequest(sparePartDetailInfoUrl, sparePartData, pBar);
                 sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
                 detailsIterationCount++;
             }
@@ -168,6 +166,19 @@ class Autodoc {
         return items;
     }
 
+
+    async makePostRequest(sparePartDetailInfoUrl, sparePartData, pBar) {
+        const response = await this.functions.tryPost(sparePartDetailInfoUrl, sparePartData);
+        pBar.increment();
+        return response;
+    }
+
+
+    async makeGetRequest(url, pBar) {
+        const response = await this.functions.tryGet(url);
+        pBar.increment();
+        return response;
+    }
 }
 
 module.exports = new Autodoc();

@@ -5,7 +5,6 @@ class Emex {
         this.functions = require('./functions');
         this.logger = require('./logger');
         this.requestPortion = 10;
-        this.limit = 100;
     }
 
     /**
@@ -13,6 +12,7 @@ class Emex {
      *
      * @param details   {Object[]}      Массив с деталями
      * @param pBar      {GenericBar}    Progress bar
+     * @return          {Object}        Объект, где ключ - номер детали
      */
     async getDetailOffers(details, pBar) {
         pBar.setTotal(details.length);
@@ -22,13 +22,13 @@ class Emex {
         for (const detail of details) {
             const detailName = detail.PART_NAME;
             const detailNumber = detail.PART_NUMBER;
-            requests.push(this.requestDetail(detailNumber, pBar)); // TODO: Парсить порционно как на питоне
+            requests.push(this.requestDetail(detailNumber, pBar));
             if (requests.length === this.requestPortion) {
                 const results = await Promise.all(requests);
                 responses = responses.concat(results);
                 requests = [];
             }
-            if (responses.length >= this.limit) { // DEBUG
+            if (this.settings.DEBUG.LIMIT === 'Y' && responses.length >= this.settings.DEBUG.LIMIT_COUNT) { // DEBUG
                 break;
             }
         }
@@ -36,8 +36,8 @@ class Emex {
         const results = await Promise.all(requests);
         responses = responses.concat(results);
 
-        pBar.update(0);
-        pBar.setTotal(responses.length);
+        // pBar.update(0);
+        // pBar.setTotal(responses.length); // Ломает
 
         const detailItems = {};
         for (const response of responses)
@@ -71,15 +71,15 @@ class Emex {
                     for (const offer of offers)
                     {
                         const item = {
+                            'TYPE': 'original',
                             'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
                             'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['detailNum'],
+                            'DETAIL_NUMBER': offer['data']['detailNum'],
                             'DETAIL_NAME': offer['data']['detailName'],
                             'PRICE': offer['price']['value'],
                             'DELIVERY': offer['delivery']['value'],
                             'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['make'],
-
+                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
                         };
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
@@ -98,25 +98,16 @@ class Emex {
                     for (const offer of offers)
                     {
                         const item = {
+                            'TYPE': 'analog',
                             'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
                             'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['detailNum'],
-                            'DETAIL_NAME': offer['name'],
+                            'DETAIL_NUMBER': offer['data']['detailNum'],
+                            'DETAIL_NAME': offer['data']['name'],
                             'PRICE': offer['price'] ? offer['price']['value'] : '',
                             'DELIVERY': offer['delivery'] ? offer['price']['value'] : '',
                             'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['make'],
+                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
                         };
-
-                        if (!item['PRICE']) {
-                            await this.logger.json('no-price' + Math.random(), offer);
-                            continue;
-                        }
-
-                        if (!item['DELIVERY']) {
-                            await this.logger.json('no-delivery' + Math.random(), offer);
-                            continue;
-                        }
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
                         detailItems[originalDetailNumber]['DETAIL_OFFERS'].push(item);
@@ -133,14 +124,15 @@ class Emex {
                     for (const offer of offers)
                     {
                         const item = {
+                            'TYPE': 'replacement',
                             'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
                             'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['detailNum'],
-                            'DETAIL_NAME': offer['name'],
+                            'DETAIL_NUMBER': offer['data']['detailNum'],
+                            'DETAIL_NAME': offer['data']['name'],
                             'PRICE': offer['price']['value'],
                             'DELIVERY': offer['delivery']['value'],
                             'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['make'],
+                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
                         };
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
@@ -148,10 +140,10 @@ class Emex {
                     }
                 }
             }
+
             pBar.increment();
         }
 
-        pBar.stop();
         return detailItems;
     }
 
@@ -174,7 +166,9 @@ class Emex {
         const latitude = encodeURIComponent(latitudeList[locationIndex]);
         const longitude = encodeURIComponent(longitudeList[locationIndex]);
 
-        const url = `https://emex.ru/api/search/search2?detailNum=${encodeURIComponent(detailNumber)}&isHeaderSearch=true&showAll=true&searchString=${encodeURIComponent(detailNumber)}&locationId=${locationId}&longitude=${longitude}&latitude=${latitude}`;
+        const showAll = 'false'; // При true будет дохуища результатов
+
+        const url = `https://emex.ru/api/search/search2?detailNum=${encodeURIComponent(detailNumber)}&isHeaderSearch=true&showAll=${showAll}&searchString=${encodeURIComponent(detailNumber)}&locationId=${locationId}&longitude=${longitude}&latitude=${latitude}`;
         const headers = {
             'Access-Control-Allow-Origin': 'https://emex.ru',
             'referer': `https://emex.ru/products/${detailNumber}/`,
@@ -182,7 +176,9 @@ class Emex {
             'User-agent': this.functions.getUserAgent()
         };
 
-        return await this.functions.tryGet(url, pBar, {}, headers);
+        const response = await this.functions.tryGet(url, {headers: headers});
+        pBar.increment();
+        return response;
     }
 
 }

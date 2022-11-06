@@ -1,5 +1,6 @@
 class Parser {
-    vinsAndPartsObj = {}; // Для записи в один файл
+    vinsAndPartsObj = {}; // Для записи деталей и их названий в один файл
+    offersObj = {};
     autodoc;
     emex;
 
@@ -22,14 +23,6 @@ class Parser {
         const detailsFile = settings.INPUT.DETAILS_FILE;
         const accountsFile = settings.INPUT.ACCOUNTS;
 
-        const createVinsFile = settings.OUTPUT.CREATE_VINS_FILE;
-        const oneVinsFile = settings.OUTPUT.VINS_RESULT_IN_ONE_FILE;
-
-        const startFromVins = settings.STARTUP.START_FROM_VINS;
-
-        const useAutodocParser = settings.PARSERS.AUTODOC;
-        const useEmexParser = settings.PARSERS.EMEX;
-
         const vinsFilePath = `${inputDirname}/${vinsFile}`.replaceAll('//', '/');
         const detailsFilePath = `${inputDirname}/${detailsFile}`.replaceAll('//', '/');
         const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
@@ -40,7 +33,7 @@ class Parser {
         let accounts = [];
         let details = [];
 
-        if (startFromVins === "Y") {
+        if (settings.STARTUP.START_FROM_VINS === "Y") {
             this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
             this.autodoc.settings = settings;
             vins = await this.getVins(vinsFilePath);
@@ -48,13 +41,13 @@ class Parser {
             details = await this.getDetails(detailsFilePath);
         }
 
-        if (useAutodocParser === "Y") {
+        if (settings.PARSERS.AUTODOC === "Y") {
             this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
             accounts = await this.getAccounts(accountsFilePath);
             this.autodoc.settings = settings;
         }
 
-        if (useEmexParser === 'Y') {
+        if (settings.PARSERS.EMEX === 'Y') {
             this.emex = require('./emex');
             this.emex.settings = settings;
         }
@@ -68,7 +61,7 @@ class Parser {
      *
      * @returns {Promise<void>}
      */
-    async startParsers(vins, details, accounts) {
+    async startParsers(vins, allDetails, accounts) {
         const multibar = this.functions.initMultibar();
         const vinRequests = [];
 
@@ -90,16 +83,16 @@ class Parser {
             multibar.stop();
 
             if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
-                const date = new Date().toISOString().split('T')[0];
-                await this.functions.createXLSXAsync(`output/${date} VINS.xlsx`, this.vinsAndPartsObj);
+                const date = this.functions.getCurrentDate();
+                const outputDir = this.functions.OUTPUT.DIRNAME;
+                await this.functions.createXLSXAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
             }
         } else {
-            const detailSheets = this.settings.DETAILS;
             const detailsRequests = [];
 
-            for (const sheet in detailSheets) {
+            for (const sheet in allDetails) {
                 const vin = sheet;
-                const details = detailSheets[sheet];
+                const details = allDetails[sheet];
                 const bar = multibar.create(1, 0, {
                     speed: "N/A"
                 });
@@ -108,6 +101,12 @@ class Parser {
             }
 
             const details = await Promise.all(detailsRequests);
+
+            if (this.settings.DETAILS_RESULT_IN_ONE_FILE === 'Y') {
+                const date = this.functions.getCurrentDate();
+                const outputDir = this.functions.OUTPUT.DIRNAME;
+                await this.functions.createXLSXAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
+            }
         }
         console.log('Парсинг завершён!');
     }
@@ -118,14 +117,14 @@ class Parser {
      *
      * @param vin       {string}        VIN номер
      * @param pBar      {GenericBar}    Progress bar
-     * @returns {Promise<void>}
+     * @returns {Promise<{vin: {}}>}
      */
     async parseVins(vin, pBar) {
         const detailsInfo = await this.autodoc.parseVin(vin, pBar);
 
         if (this.settings.CREATE_VINS_FILE === 'Y')
         {
-            const date = new Date().toISOString().split('T')[0];
+            const date = this.functions.getCurrentDate();
 
             if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 this.vinsAndPartsObj[vin] = detailsInfo;
@@ -137,6 +136,9 @@ class Parser {
         }
 
         const detailOffers = await this.parseDetails(vin, detailsInfo, pBar);
+        return {
+            vin: detailOffers
+        };
     }
 
     /**
@@ -145,7 +147,7 @@ class Parser {
      * @param vin       {string}        VIN номер
      * @param details   {Object[]}      Массив с деталями
      * @param pBar      {GenericBar}    Progress bar
-     * @returns {Promise<void>}
+     * @returns {Promise<{}>}           Объект, где ключ - номер детали, а значение - информация о деталях
      */
     async parseDetails(vin, details, pBar) {
         const detailsRequests = [];
@@ -157,8 +159,151 @@ class Parser {
             detailsRequests.push(this.autodoc.getDetailOffers(details, pBar));
         }
 
-        const results = await Promise.all(detailsRequests);
-        this.logger.json('offers', results);
+        let detailsResponses = await Promise.all(detailsRequests);
+        let outputData = this.mergeResults(detailsResponses);
+
+        if (this.settings.OUTPUT.COUNT_AVERAGE_PRICE === 'Y') {
+            outputData = this.calculateAveragePrice(vin, outputData);
+        } else {
+            outputData = this.prepareToPrint(vin, outputData);
+        }
+
+        if (this.settings.OUTPUT.DETAILS_RESULT_IN_ONE_FILE === 'N') {
+            const outputDir = this.settings.OUTPUT.DIRNAME;
+            const today = this.functions.getCurrentDate();
+            const filename = `${today} ${vin}.xlsx`;
+            await this.functions.createXLSXAsync(outputDir + '/' + filename, outputData);
+        } else {
+            this.offersObj[vin] = outputData;
+        }
+
+        pBar.stop();
+        return outputData;
+    }
+
+
+    prepareToPrint(vin, details) {
+        const outputData = {};
+        outputData[vin] = [];
+        for (const originalDetailNumber in details) {
+            const detailInfo = details[originalDetailNumber];
+            let originalDetailName = detailInfo['DETAIL_NAME'];
+
+            if (detailInfo['DETAIL_OFFERS'].length === 0 && this.settings.SETTINGS.SHOW_IF_NOT_FOUND === 'Y') {
+                outputData[vin].push({
+                    'Искомый номер': originalDetailNumber,
+                    'Номер': '',
+                    'Название': 'Нет в наличии',
+                    'Цена': '',
+                    'Доставка': '',
+                    'Количество': '',
+                    'Производитель': '',
+                });
+            } else {
+                for (const offer of detailInfo['DETAIL_OFFERS']) {
+                    const type = offer['TYPE'];
+                    const detailNumber = offer['DETAIL_NUMBER'];
+                    const detailName = offer['DETAIL_NAME'];
+                    const price = offer['PRICE'];
+                    const delivery = offer['DELIVERY'];
+                    const quantity = offer['QUANTITY'];
+                    const manufacturer = offer['MANUFACTURER'];
+
+                    outputData[vin].push({
+                        'Тип': type,
+                        'Искомый номер': originalDetailNumber,
+                        'Номер': detailNumber, // TODO: Пустота
+                        'Название': originalDetailName ?? detailName,
+                        'Цена': price ?? 0,
+                        'Доставка': delivery ?? 0,
+                        'Количество': quantity ?? 0,
+                        'Производитель': manufacturer ?? '',
+                    });
+                }
+            }
+        }
+
+        return outputData;
+    }
+
+
+    /**
+     * Подсчитывает средние значения для каждой детали
+     *
+     * @param vin
+     * @param details
+     * @return {Promise<{vin: *[]}>}
+     */
+    calculateAveragePrice(vin, details) {
+        const outputData = {};
+        outputData[vin] = [];
+        for (const detailNumber in details) {
+            const detailInfo = details[detailNumber];
+
+            if (detailInfo['DETAIL_OFFERS'].length === 0 && this.settings.SETTINGS.SHOW_IF_NOT_FOUND === 'N') {
+                continue;
+            }
+
+            let sumPrice = 0;
+            let sumDelivery = 0;
+            for (const offer of detailInfo['DETAIL_OFFERS']) {
+                sumPrice += parseInt(offer['PRICE']);
+                sumDelivery += parseInt(offer['DELIVERY']);
+            }
+
+            let detailName;
+            let avgPrice = '';
+            let avgDelivery = '';
+            if (detailInfo['DETAIL_OFFERS'].length !== 0) {
+                detailName = detailInfo['DETAIL_NAME'];
+                avgPrice = sumPrice / detailInfo['DETAIL_OFFERS'].length;
+                avgDelivery = sumDelivery / detailInfo['DETAIL_OFFERS'].length;
+            } else {
+                detailName = 'Нет в наличии';
+            }
+
+            outputData[vin].push({
+                'Номер': detailNumber,
+                'Название': detailName,
+                'Средняя цена': avgPrice,
+                'Среднее время доставки': avgDelivery
+            });
+        }
+        return outputData;
+    }
+
+
+    /**
+     * Объединяет объекты, возвращённые парсерами в один
+     *
+     * @param parserResults
+     * @return {{}} Объект с деталями
+     */
+    mergeResults(parserResults) {
+        const outputData = {};
+        for (const result of parserResults) {
+            for (const detailNumber in result) {
+                if (!(detailNumber in outputData)) {
+                    outputData[detailNumber] = {
+                        'DETAIL_NUMBER': '',
+                        'DETAIL_NAME': ''
+                    };
+                }
+                if (!('DETAIL_OFFERS' in outputData[detailNumber])) {
+                    outputData[detailNumber]['DETAIL_OFFERS'] = [];
+                }
+
+                const detailInfo = result[detailNumber];
+                const detailName = detailInfo.DETAIL_NAME;
+                const detailOffers = detailInfo.DETAIL_OFFERS;
+                outputData[detailNumber]['ORIGINAL_DETAIL_NUMBER'] = detailInfo['ORIGINAL_DETAIL_NUMBER'];
+                outputData[detailNumber]['ORIGINAL_DETAIL_NAME'] = detailInfo['ORIGINAL_DETAIL_NUMBER'];
+                outputData[detailNumber]['DETAIL_NUMBER'] = detailNumber;
+                outputData[detailNumber]['DETAIL_NAME'] = detailName;
+                outputData[detailNumber]['DETAIL_OFFERS'] = outputData[detailNumber]['DETAIL_OFFERS'].concat(detailInfo.DETAIL_OFFERS);
+            }
+        }
+        return outputData;
     }
 
 
@@ -184,6 +329,7 @@ class Parser {
         await this.createVinsInputFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
     }
+
 
     /**
      * Читает файл с деталями

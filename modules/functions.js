@@ -8,6 +8,16 @@ class Functions {
     sleepTime = 500;
 
     /**
+     * Возвращает текущую дату в формате YYYY-MM-DD
+     *
+     * @return {string}
+     */
+    getCurrentDate() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+
+    /**
      * Создаёт объект для последующего создания множественных прогресс баров
      *
      * @returns {MultiBar}
@@ -24,19 +34,16 @@ class Functions {
      * Делает несколько попыток запроса по URL. Если ответ не будет получен возвращает false
      *
      * @param url       {string}        Строка запроса
-     * @param pBar      {GenericBar}    Прогресс бар
-     * @param params    {Object}        Параметры запроса
      * @param config    {Object}        Кастомный конфиг для запроса
      * @returns {Promise<AxiosResponse<any>|boolean>}
      */
-    async tryGet(url, pBar, params = {}, config = {}) {
+    async tryGet(url, config = {}) {
         const repeatTimes = 1; // При 10 работает хорошо
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {
             try {
-                response = await this.get(url, params, config);
-                pBar.increment();
+                response = await this.get(url, config);
                 return response;
             } catch (e) {
                 await this.sleep(this.sleepTime)
@@ -51,19 +58,17 @@ class Functions {
      * Делает несколько попыток запроса по URL. Если ответ не будет получен возвращает false
      *
      * @param url       {string}        Строка запроса
-     * @param pBar      {GenericBar}    Прогресс бар
      * @param data      {Object}        Тело запроса
      * @param config    {Object}        Кастомный конфиг для запроса
      * @returns {Promise<AxiosResponse<any>|boolean>}
      */
-    async tryPost(url, data, pBar, config = {}) {
+    async tryPost(url, data, config = {}) {
         const repeatTimes = 100;
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {
             try {
                 response = await this.post(url, data, config);
-                pBar.increment();
                 return response;
             } catch (e) {
                 await this.sleep(this.sleepTime)
@@ -78,19 +83,17 @@ class Functions {
      * GET запрос с параметрами и стандартным таймаутом в 5 секунд
      *
      * @param url       {string}    Строка запроса
-     * @param params    {Object}    Параметры запроса
      * @param config    {Object}    Кастомный конфиг
      * @returns {Promise<AxiosResponse<any>>}
      */
-    async get(url, params = {}, config = {}) {
+    async get(url, config = {}) {
         const instance = this.axios.create();
-        config.params = params;
         if (!('timeout' in config)) {
             config['timeout'] = 3000;
         }
         if (!('headers' in config)) {
             config['headers'] = {
-                "User-agent": this.getUserAgent(),
+                'User-agent': this.getUserAgent(),
             };
         }
 
@@ -152,10 +155,11 @@ class Functions {
     }
 
 
+    // TODO: НИХУЯ НЕ ЗАПИСЫВАТСЯ
     /**
      * Создаёт .xlsx файл если его не существует
      *
-     * @param filepath  {string} Путь до файла
+     * @param filepath  {string} Путь до файла (с расширением .xlsx!)
      * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
      */
     async createXLSXAsync(filepath, data) {
@@ -163,7 +167,9 @@ class Functions {
 
         const dirs = filepath.split('/');
         const filename = dirs.pop();
-        this.fs.mkdirSync(dirs.join('/'), {recursive: true});
+        if (dirs.length !== 0) {
+            await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
+        }
 
         const book = this.xlsx.utils.book_new();
 

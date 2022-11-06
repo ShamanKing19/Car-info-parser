@@ -44,6 +44,7 @@ class Settings {
                 SETTINGS: {
                     DELIVERY_LIMIT: 30,
                     REPEAT_DETAIL_CYCLES: 3,
+                    SHOW_IF_NOT_FOUND: 'Y',
                 },
                 PARSERS: {
                     AUTODOC: 'Y',
@@ -51,7 +52,9 @@ class Settings {
                 },
                 DEBUG: {
                     LOGS: 'Y',
-                    ERRORS: 'Y'
+                    ERRORS: 'Y',
+                    LIMIT: 'Y',
+                    LIMIT_COUNT: 100
                 }
             };
 

@@ -8,7 +8,8 @@ class App {
 
 }
 
-
+// Эта конструкция не работает, прога не ждёт init() и поэтому в конце не закрывается
+// TODO: Починить
 (async () => {
     const app = new App();
     const settings = app.settings;

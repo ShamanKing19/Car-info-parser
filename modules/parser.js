@@ -82,9 +82,9 @@ class Parser {
             const vinsData = await Promise.all(vinRequests);
             multibar.stop();
 
-            if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
+            if (this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
-                const outputDir = this.functions.OUTPUT.DIRNAME;
+                const outputDir = this.settings.OUTPUT.DIRNAME;
                 await this.functions.createXLSXAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
             }
         } else {
@@ -102,7 +102,7 @@ class Parser {
 
             const details = await Promise.all(detailsRequests);
 
-            if (this.settings.DETAILS_RESULT_IN_ONE_FILE === 'Y') {
+            if (this.settings.OUTPUT.DETAILS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
                 const outputDir = this.functions.OUTPUT.DIRNAME;
                 await this.functions.createXLSXAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
@@ -122,11 +122,11 @@ class Parser {
     async parseVins(vin, pBar) {
         const detailsInfo = await this.autodoc.parseVin(vin, pBar);
 
-        if (this.settings.CREATE_VINS_FILE === 'Y')
+        if (this.settings.OUTPUT.CREATE_VINS_FILE === 'Y')
         {
             const date = this.functions.getCurrentDate();
 
-            if (this.settings.VINS_RESULT_IN_ONE_FILE === 'Y') {
+            if (this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 this.vinsAndPartsObj[vin] = detailsInfo;
             } else {
                 const outputList = {};

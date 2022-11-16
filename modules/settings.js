@@ -53,7 +53,7 @@ class Settings {
                 DEBUG: {
                     LOGS: 'Y',
                     ERRORS: 'Y',
-                    LIMIT: 'Y',
+                    LIMIT: 'N',
                     LIMIT_COUNT: 100
                 }
             };

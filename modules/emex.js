@@ -18,28 +18,42 @@ class Emex {
         pBar.setTotal(details.length);
         let requests = [];
         let responses = [];
+        let cycles = 1;
+        let detailsCount = 0; // Для работы циклов
 
-        for (const detail of details) {
-            const detailName = detail.PART_NAME;
-            const detailNumber = detail.PART_NUMBER;
-            requests.push(this.requestDetail(detailNumber, pBar));
-            if (requests.length === this.requestPortion) {
-                const results = await Promise.all(requests);
-                responses = responses.concat(results);
-                requests = [];
-            }
-            if (this.settings.DEBUG.LIMIT === 'Y' && responses.length >= this.settings.DEBUG.LIMIT_COUNT) { // DEBUG
-                break;
-            }
+        if (this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
+            cycles = this.settings.SETTINGS.REPEAT_DETAIL_CYCLES;
         }
 
-        const results = await Promise.all(requests);
-        responses = responses.concat(results);
+        for (let cycle = 0; cycle < cycles; cycle++)
+        {
+            for (const detail of details)
+            {
+                const detailName = detail.PART_NAME;
+                const detailNumber = detail.PART_NUMBER;
+                requests.push(this.requestDetail(detailNumber, pBar));
+                detailsCount++;
+                if (requests.length === this.requestPortion) {
+                    const results = await Promise.all(requests);
+                    responses = responses.concat(results);
+                    requests = [];
+                }
+                if (
+                    this.settings.DEBUG.LIMIT === 'Y'
+                    && detailsCount >= this.settings.DEBUG.LIMIT_COUNT
+                ) {
+                    break;
+                }
+            }
 
-        // pBar.update(0);
-        // pBar.setTotal(responses.length); // Ломает
+            const results = await Promise.all(requests);
+            responses = responses.concat(results);
 
-        const detailItems = {};
+            detailsCount = 0;
+            pBar.update(0);
+        }
+
+        const detailItemsObj = {};
         for (const response of responses)
         {
             if (!response) continue;
@@ -53,7 +67,7 @@ class Emex {
             const analogs = data['analogs'];
             const replacements = data['replacements'];
 
-            detailItems[originalDetailNumber] = {
+            detailItemsObj[originalDetailNumber] = {
                 'DETAIL_NUMBER': originalDetailNumber,
                 'DETAIL_NAME': originalDetailName,
                 'DETAIL_OFFERS': []
@@ -84,7 +98,7 @@ class Emex {
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
 
-                        detailItems[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
                     }
                 }
             }
@@ -110,7 +124,7 @@ class Emex {
                         };
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
-                        detailItems[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
                     }
                 }
             }
@@ -136,7 +150,7 @@ class Emex {
                         };
 
                         if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
-                        detailItems[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
                     }
                 }
             }
@@ -144,7 +158,7 @@ class Emex {
             pBar.increment();
         }
 
-        return detailItems;
+        return detailItemsObj;
     }
 
 

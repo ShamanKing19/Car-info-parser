@@ -1,6 +1,7 @@
 class Parser {
     vinsAndPartsObj = {}; // Для записи деталей и их названий в один файл
     offersObj = {};
+    autodocAccounts;
     autodoc;
     emex;
 
@@ -43,7 +44,7 @@ class Parser {
 
         if (settings.PARSERS.AUTODOC === "Y") {
             this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
-            accounts = await this.getAccounts(accountsFilePath);
+            this.autodocAccounts = await this.getAutodocAccounts(accountsFilePath);
             this.autodoc.settings = settings;
         }
 
@@ -52,7 +53,7 @@ class Parser {
             this.emex.settings = settings;
         }
 
-        await this.startParsers(vins, details, accounts);
+        await this.startParsers(vins, details);
     }
 
 
@@ -61,10 +62,11 @@ class Parser {
      *
      * @returns {Promise<void>}
      */
-    async startParsers(vins, allDetails, accounts) {
+    async startParsers(vins, allDetails) {
         const multibar = this.functions.initMultibar();
         const vinRequests = [];
 
+        // Старт с VIN номеров
         if (this.settings.STARTUP.START_FROM_VINS === 'Y')
         {
             for (const sheet in vins)
@@ -88,6 +90,7 @@ class Parser {
                 await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
             }
         } else {
+            // Старт со списка деталей
             const detailsRequests = [];
 
             for (const sheet in allDetails) {
@@ -96,7 +99,6 @@ class Parser {
                 const bar = multibar.create(1, 0, {
                     speed: "N/A"
                 });
-
                 detailsRequests.push(this.parseDetails(vin, details, bar));
             }
 
@@ -157,7 +159,8 @@ class Parser {
             detailsRequests.push(this.emex.getDetailOffers(details, pBar));
         }
         if (this.settings.PARSERS.AUTODOC === 'Y') {
-            detailsRequests.push(this.autodoc.getDetailOffers(details, pBar));
+            const account = this.getUniqueAutodocAccount();
+            detailsRequests.push(this.autodoc.getDetailOffers(details, account, pBar));
         }
 
         let detailsResponses = await Promise.all(detailsRequests);
@@ -180,6 +183,16 @@ class Parser {
 
         pBar.stop();
         return outputData;
+    }
+
+
+    getUniqueAutodocAccount() {
+        const randomIndex = Math.floor(Math.random() * this.autodocAccounts.length);
+        const account = this.autodocAccounts[randomIndex];
+        if (this.autodocAccounts.length > 1) {
+            this.autodocAccounts.splice(randomIndex, 1);
+        }
+        return account;
     }
 
 
@@ -314,7 +327,7 @@ class Parser {
      * @param filepath  {string}    Путь к файлу
      * @returns {Promise<Object[]>}
      */
-    async getAccounts(filepath) {
+    async getAutodocAccounts(filepath) {
         await this.createAccountsFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
     }
@@ -328,7 +341,7 @@ class Parser {
      */
     async getVins(filepath) {
         await this.createVinsInputFileIfNotExistsAsync(filepath);
-        return this.functions.readXLSX(filepath);
+        return this.functions.readXLSXByPage(filepath);
     }
 
 
@@ -340,7 +353,7 @@ class Parser {
      */
     async getDetails(filepath) {
         await this.createDetailsInputFileIfNotExistsAsync(filepath);
-        return this.functions.readXLSX(filepath);
+        return this.functions.readXLSXByPage(filepath);
     }
 
 

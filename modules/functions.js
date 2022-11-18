@@ -60,10 +60,10 @@ class Functions {
      * @param url       {string}        Строка запроса
      * @param data      {Object}        Тело запроса
      * @param config    {Object}        Кастомный конфиг для запроса
+     * @param repeatTimes {int}         Количество повторных запросов
      * @returns {Promise<AxiosResponse<any>|boolean>}
      */
-    async tryPost(url, data, config = {}) {
-        const repeatTimes = 100;
+    async tryPost(url, data, config = {}, repeatTimes = 100) {
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {
@@ -116,7 +116,7 @@ class Functions {
         }
         if (!('headers' in config)) {
             config['headers'] = {
-                "User-agent": this.getUserAgent(),
+                'User-agent': this.getUserAgent(),
             };
         }
 
@@ -136,12 +136,30 @@ class Functions {
 
 
     /**
-     * Читает .xlsx файл постранично и возвращает объект
+     * Читает первую страницу .xlsx файла и возвращает объект
      *
      * @param filepath  {string}  Путь до файла
      * @returns {[Object]}   Массив с объектами
      */
     readXLSX(filepath) {
+        const file = this.xlsx.readFile(filepath);
+        const sheets = file.Sheets;
+
+        for (const sheetName in sheets) {
+            const sheet = sheets[sheetName];
+            return this.xlsx.utils.sheet_to_json(sheet);
+        }
+
+    }
+
+
+    /**
+     * Читает .xlsx файл постранично и возвращает объект
+     *
+     * @param filepath  {string}  Путь до файла
+     * @returns {[Object]}   Массив с объектами
+     */
+    readXLSXByPage(filepath) {
         const file = this.xlsx.readFile(filepath);
         const sheets = file.Sheets;
         const data = [];

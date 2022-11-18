@@ -1,11 +1,76 @@
 class Autodoc {
-    accounts;
-    settings;
+    settings; // Устанавливаются вместе с инициализацией
 
-    constructor(accounts) {
-        this.accounts = accounts;
+    constructor() {
         this.functions = require('./functions');
         this.logger = require('./logger');
+    }
+
+
+    async getDetailOffers(details, account, pBar) {
+        const challengeGuid = await this.getChallengeGuid();
+        const tokenData = await this.getAuthToken(account);
+        const authData = await this.logIn(challengeGuid, tokenData, account);
+        const clientStatus = parseInt(authData['clientStatus'])
+
+
+    }
+
+
+    async logIn(challengeGuid, tokenData, account) {
+        const loginAttempts = ["DC1/O1127x9ZL4GU2bhQgg==", "W7F+x+sPZUPsCAcXwYSH5Q=="];
+        const randomIndex = Math.floor(Math.random() * loginAttempts.length);
+        const attempt = loginAttempts[randomIndex];
+        const url = 'https://webapi.autodoc.ru/api/account/login';
+        const response = await this.functions.tryPost(url, {
+            'attempt': attempt,
+            'challengeGuid': challengeGuid,
+            'gRecaptchaResponse': '',
+            'login': account['LOGIN'],
+            'password': account['PASSWORD'],
+            'rememberMe': 'true'
+        }, {
+            headers: {
+                'authorization': tokenData['token_type'] + ' ' + tokenData['access_token'],
+            }
+        }, 1);
+
+        return response.data;
+    }
+
+
+    async getAuthToken(account) {
+        const url = 'https://auth.autodoc.ru/token';
+        let response;
+        try {
+            response = await this.functions.axios.post(url, {
+                username: account['LOGIN'],
+                password: account['PASSWORD'],
+                grant_type: 'password',
+            }, {
+                headers: {
+                    authorization: 'Bearer',
+                    'content-type': 'application/x-www-form-urlencoded',
+                    accept: 'application/json',
+                    origin: 'https://www.autodoc.ru',
+                    referer: 'https://www.autodoc.ru/'
+                }
+            });
+        } catch (e) {
+            return false;
+        }
+        return response.data;
+    }
+
+
+    async getChallengeGuid() {
+        const url = 'https://webapi.autodoc.ru/api/captha?resource=Auth';
+        const response = await this.functions.tryGet(url);
+        const challengeGuid = response.data['challengeGuid'];
+        if (challengeGuid) {
+            return challengeGuid;
+        }
+        return false;
     }
 
 

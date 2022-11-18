@@ -85,7 +85,7 @@ class Parser {
             if (this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
                 const outputDir = this.settings.OUTPUT.DIRNAME;
-                await this.functions.createXLSXAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
+                await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
             }
         } else {
             const detailsRequests = [];
@@ -104,8 +104,9 @@ class Parser {
 
             if (this.settings.OUTPUT.DETAILS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
-                const outputDir = this.functions.OUTPUT.DIRNAME;
-                await this.functions.createXLSXAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
+                const outputDir = this.settings.OUTPUT.DIRNAME;
+                // TODO: Починить, ломается здесь
+                await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
             }
         }
         console.log('Парсинг завершён!');
@@ -131,7 +132,7 @@ class Parser {
             } else {
                 const outputList = {};
                 outputList[vin] = detailsInfo;
-                await this.functions.createXLSXAsync(`output/${date} ${vin} details.xlsx`, outputList);
+                await this.functions.createXLSCFromObjectAsync(`output/${date} ${vin} details.xlsx`, outputList);
             }
         }
 
@@ -172,7 +173,7 @@ class Parser {
             const outputDir = this.settings.OUTPUT.DIRNAME;
             const today = this.functions.getCurrentDate();
             const filename = `${today} ${vin}.xlsx`;
-            await this.functions.createXLSXAsync(outputDir + '/' + filename, outputData);
+            await this.functions.createXLSCFromObjectAsync(outputDir + '/' + filename, outputData);
         } else {
             this.offersObj[vin] = outputData;
         }
@@ -357,7 +358,7 @@ class Parser {
                 }
             ]
         };
-        await this.functions.createXLSXAsync(filepath, headers);
+        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 
@@ -377,7 +378,7 @@ class Parser {
                 }
             ]
         };
-        await this.functions.createXLSXAsync(filepath, headers);
+        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 
@@ -396,7 +397,7 @@ class Parser {
                 }
             ]
         };
-        await this.functions.createXLSXAsync(filepath, headers);
+        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 }

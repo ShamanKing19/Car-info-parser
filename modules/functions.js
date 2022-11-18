@@ -154,14 +154,44 @@ class Functions {
         return data;
     }
 
+    /**
+     * Создаёт .xlsx файл если его не существует из массива
+     *
+     * @param filepath  {string}
+     * @param data      {array<Object>}
+     * @param sheetName {string}
+     * @returns {Promise<void>}
+     */
+    // TODO: Использовать её везде кроме записи результатов парсинга
+    async createXLSXFromListAsync(filepath, data, sheetName) {
+        if (this.fs.existsSync(filepath)) return;
+        const dirs = filepath.split('/');
+        const filename = dirs.pop();
+        if (dirs.length !== 0) {
+            await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
+        }
+
+        const book = this.xlsx.utils.book_new();
+
+        const options = {
+            // type: 'buffer', // С этим тоже работает
+            type: 'string',
+            bookType: 'xlsx',
+        };
+
+        const sheet = this.xlsx.utils.json_to_sheet(data);
+        this.xlsx.utils.book_append_sheet(book, sheet, sheetName);
+
+        await this.xlsx.writeFileAsync(filepath, book, options, () => {});
+    }
 
     /**
-     * Создаёт .xlsx файл если его не существует
+     * Создаёт .xlsx файл если его не существует из объекта
      *
      * @param filepath  {string} Путь до файла (с расширением .xlsx!)
      * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
      */
-    async createXLSXAsync(filepath, data) {
+    async createXLSCFromObjectAsync(filepath, data) {
         if (this.fs.existsSync(filepath)) return;
 
         const dirs = filepath.split('/');
@@ -179,8 +209,8 @@ class Functions {
         };
 
         for (const page in data) {
-            const xlsxData = this.xlsx.utils.json_to_sheet(data[page]);
-            this.xlsx.utils.book_append_sheet(book, xlsxData, page);
+            const sheet = this.xlsx.utils.json_to_sheet(data[page]);
+            this.xlsx.utils.book_append_sheet(book, sheet, page);
         }
 
         await this.xlsx.writeFileAsync(filepath, book, options, () => {});

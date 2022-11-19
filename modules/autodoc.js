@@ -8,19 +8,25 @@ class Autodoc {
 
 
     async getDetailOffers(details, account, pBar) {
-        const challengeGuid = await this.getChallengeGuid();
-        const tokenData = await this.getAuthToken(account);
-        const authData = await this.logIn(challengeGuid, tokenData, account);
-        // const clientStatus = parseInt(authData['clientStatus'])
+        const loginAttempts = ["DC1/O1127x9ZL4GU2bhQgg==", "W7F+x+sPZUPsCAcXwYSH5Q=="];
+        const randomIndex = Math.floor(Math.random() * loginAttempts.length);
+        const attempt = loginAttempts[randomIndex];
 
-        // TODO: Создавать сессию и отправлять запросы из неё, либо попробовать
-        // сохранять и устанавливать куки каждому запросу
+        pBar.setTotal(3);
+
+        const challengeGuid = await this.getChallengeGuid();
+        pBar.increment();
+        const tokenData = await this.getAuthToken(account);
+        if (!tokenData) return false;
+        pBar.increment();
+        const session = await this.logIn(challengeGuid, tokenData, attempt, account);
+        if (!session) return false;
+        pBar.increment();
 
         const requests = [];
         pBar.setTotal(details.length);
         for (const detail of details) {
-            requests.push(this.parseDetail(detail, session, pBar));
-            // break; // DEV
+            requests.push(this.parseDetail(detail, session, attempt, pBar));
         }
 
         const responses = await Promise.all(requests);
@@ -29,49 +35,105 @@ class Autodoc {
     }
 
 
-    async parseDetail(detail, session, pBar) {
-        const detailNumber = detail['PART_NUMBER'];
-        const detailName = detail['PART_NAME'];
+    async parseDetail(detail, session, attempt, pBar) {
+        let detailNumber = detail['PART_NUMBER'];
+        let detailName = detail['PART_NAME'];
         const clearDetailNumber = detailNumber.replaceAll('-', '').replaceAll(' ', '');
 
-        const manufacturers = await this.getManufacturerInfo(clearDetailNumber, session, pBar);
-        // console.log(manufacturers)
+        const manufacturerList = await this.getManufacturerInfo(clearDetailNumber, session);
+
+        if (!manufacturerList) return false;
+
+        const requests = [];
+        for (const manufacturer of manufacturerList) {
+            const manufacturerId = manufacturer['id'];
+            const manufacturerName = manufacturer['manufacturerName'];
+            detailNumber = manufacturer['artNumber'] ?? detailNumber;
+            detailName = manufacturer['partName'] ?? detailName;
+
+            requests.push(this.getDetailInfoByManufacturer(session, manufacturerId, detailNumber, attempt, pBar));
+        }
+
+        const responses = await Promise.all(requests);
+    }
+
+
+    /**
+     *
+     *
+     * @param session {AxiosInstance}
+     * @param manufacturerId
+     * @param detailNumber
+     * @param attempt
+     * @param pBar
+     * @return {Promise<void>}
+     */
+    async getDetailInfoByManufacturer(session, manufacturerId, detailNumber, attempt, pBar) {
+        const originalsUrl = `https://webapi.autodoc.ru/api/spareparts/${manufacturerId}/${detailNumber}/2?framesId=undefined&attempt=${attempt}&isrecross=false`;
+        const analogsUrl = `https://webapi.autodoc.ru/api/spareparts/analogs/${manufacturerId}/${detailNumber}/2`;
+
+        session.defaults.headers.common['hash_'] = await this.getHash(manufacturerId, detailNumber);
+        session.defaults.headers.common['dnt'] = '1';
+        session.defaults.headers.common['source_'] = 'Site2';
+
+        const originalsRequest = session.get(originalsUrl);
+        const analogsRequest = session.get(analogsUrl);
+
+        const responses = await Promise.all([originalsRequest, analogsRequest]);
+
+        const originalsResponse = responses[0];
+        const analogsResponse = responses[1];
+
+        // console.log(originalsResponse.data);
+        pBar.increment();
+
+    }
+
+
+    async getHash(manufacturerId, detailNumber) {
+        const url = `https://webapi.autodoc.ru/api/spareparts/hash/${manufacturerId}/${detailNumber}`;
+        const response = await this.functions.tryPost(url, {});
+        return response.data;
     }
 
 
     async getManufacturerInfo(detailNumber, session, pBar) {
-        const url = `https://webapi.autodoc.ru/api/manufacturers/${detailNumber}?showAll=false`
-        const response = await this.makeGetRequest(url, pBar);
-
-        console.log(response);
-        return response.data;
+        const url = `https://webapi.autodoc.ru/api/manufacturers/${encodeURIComponent(detailNumber)}?showAll=false`;
+        try {
+            const response = await session.get(url);
+            return response.data;
+        } catch (e) {
+            return false;
+        }
     }
 
 
-    async logIn(challengeGuid, tokenData, account) {
-        // TODO: Здесть делать axiosInstance и отправлять запросы через него,
-        //  а потом возвращать его и все последующие запросы кидать тоже через него
-        const loginAttempts = ["DC1/O1127x9ZL4GU2bhQgg==", "W7F+x+sPZUPsCAcXwYSH5Q=="];
-        const randomIndex = Math.floor(Math.random() * loginAttempts.length);
-        const attempt = loginAttempts[randomIndex];
+    async logIn(challengeGuid, tokenData, attempt, account) {
+        const axiosInstance = this.functions.axios.create();
         const url = 'https://webapi.autodoc.ru/api/account/login';
-        const response = await this.functions.tryPost(url, {
-            'attempt': attempt,
-            'challengeGuid': challengeGuid,
-            'gRecaptchaResponse': '',
-            'login': account['LOGIN'],
-            'password': account['PASSWORD'],
-            'rememberMe': 'true'
-        }, {
-            headers: {
-                'authorization': tokenData['token_type'] + ' ' + tokenData['access_token'],
-            }
-        }, 1);
-
-        return response.data;
+        let response;
+        try {
+            response = await axiosInstance.post(url, {
+                'attempt': attempt,
+                'challengeGuid': challengeGuid,
+                'gRecaptchaResponse': '',
+                'login': account['LOGIN'],
+                'password': account['PASSWORD'],
+                'rememberMe': 'true'
+            }, {
+                headers: {
+                    'authorization': tokenData['token_type'] + ' ' + tokenData['access_token'],
+                },
+                timeout: 3000
+            });
+        } catch (e) {
+            // console.log(e);
+            return false;
+        }
+        return axiosInstance;
     }
 
-
+    // TODO: Остановился тут, перестала проходить авторизация, возможно забанили
     async getAuthToken(account) {
         const url = 'https://auth.autodoc.ru/token';
         let response;
@@ -86,12 +148,15 @@ class Autodoc {
                     'content-type': 'application/x-www-form-urlencoded',
                     accept: 'application/json',
                     origin: 'https://www.autodoc.ru',
-                    referer: 'https://www.autodoc.ru/'
-                }
+                    referer: 'https://www.autodoc.ru/',
+                    'user-agent': this.functions.getUserAgent()
+                },
             });
         } catch (e) {
+            console.log(e);
             return false;
         }
+
         return response.data;
     }
 
@@ -99,9 +164,12 @@ class Autodoc {
     async getChallengeGuid() {
         const url = 'https://webapi.autodoc.ru/api/captha?resource=Auth';
         const response = await this.functions.tryGet(url);
-        const challengeGuid = response.data['challengeGuid'];
-        if (challengeGuid) {
-            return challengeGuid;
+
+        if (response) {
+            const challengeGuid = response.data['challengeGuid'];
+            if (challengeGuid) {
+                return challengeGuid;
+            }
         }
         return false;
     }

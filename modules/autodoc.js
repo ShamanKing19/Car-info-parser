@@ -11,13 +11,46 @@ class Autodoc {
         const challengeGuid = await this.getChallengeGuid();
         const tokenData = await this.getAuthToken(account);
         const authData = await this.logIn(challengeGuid, tokenData, account);
-        const clientStatus = parseInt(authData['clientStatus'])
+        // const clientStatus = parseInt(authData['clientStatus'])
+
+        // TODO: Создавать сессию и отправлять запросы из неё, либо попробовать
+        // сохранять и устанавливать куки каждому запросу
+
+        const requests = [];
+        pBar.setTotal(details.length);
+        for (const detail of details) {
+            requests.push(this.parseDetail(detail, session, pBar));
+            // break; // DEV
+        }
+
+        const responses = await Promise.all(requests);
 
 
     }
 
 
+    async parseDetail(detail, session, pBar) {
+        const detailNumber = detail['PART_NUMBER'];
+        const detailName = detail['PART_NAME'];
+        const clearDetailNumber = detailNumber.replaceAll('-', '').replaceAll(' ', '');
+
+        const manufacturers = await this.getManufacturerInfo(clearDetailNumber, session, pBar);
+        // console.log(manufacturers)
+    }
+
+
+    async getManufacturerInfo(detailNumber, session, pBar) {
+        const url = `https://webapi.autodoc.ru/api/manufacturers/${detailNumber}?showAll=false`
+        const response = await this.makeGetRequest(url, pBar);
+
+        console.log(response);
+        return response.data;
+    }
+
+
     async logIn(challengeGuid, tokenData, account) {
+        // TODO: Здесть делать axiosInstance и отправлять запросы через него,
+        //  а потом возвращать его и все последующие запросы кидать тоже через него
         const loginAttempts = ["DC1/O1127x9ZL4GU2bhQgg==", "W7F+x+sPZUPsCAcXwYSH5Q=="];
         const randomIndex = Math.floor(Math.random() * loginAttempts.length);
         const attempt = loginAttempts[randomIndex];
@@ -239,8 +272,8 @@ class Autodoc {
     }
 
 
-    async makeGetRequest(url, pBar) {
-        const response = await this.functions.tryGet(url);
+    async makeGetRequest(url, pBar, config = {}) {
+        const response = await this.functions.tryGet(url, config);
         pBar.increment();
         return response;
     }

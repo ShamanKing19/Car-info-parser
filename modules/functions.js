@@ -35,10 +35,10 @@ class Functions {
      *
      * @param url       {string}        Строка запроса
      * @param config    {Object}        Кастомный конфиг для запроса
+     * @param repeatTimes {int}         Количество повторений (При 10 работает хорошо)
      * @returns {Promise<AxiosResponse<any>|boolean>}
      */
-    async tryGet(url, config = {}) {
-        const repeatTimes = 1; // При 10 работает хорошо
+    async tryGet(url, config = {}, repeatTimes = 1) {
         let response;
 
         for (let i = 0; i < repeatTimes; i++) {

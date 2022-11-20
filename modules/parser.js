@@ -31,7 +31,6 @@ class Parser {
         this.settings = settings;
 
         let vins = [];
-        let accounts = [];
         let details = [];
 
         if (settings.STARTUP.START_FROM_VINS === "Y") {
@@ -74,10 +73,19 @@ class Parser {
                 for (const row of vins[sheet])
                 {
                     const vin = row.VINS;
-                    const bar = multibar.create(1, 0, {
-                        speed: "N/A"
-                    });
-                    vinRequests.push(this.parseVins(vin, bar));
+                    const pBars = {};
+                    if (this.settings.PARSERS.AUTODOC === 'Y') {
+                        pBars['AUTODOC'] = multibar.create(1, 0, {
+                            speed: "N/A"
+                        });
+                    }
+                    if (this.settings.PARSERS.EMEX === 'Y') {
+                        pBars['EMEX'] = multibar.create(1, 0, {
+                            speed: "N/A"
+                        });
+                    }
+
+                    vinRequests.push(this.parseVins(vin, pBars));
                 }
             }
 
@@ -96,10 +104,18 @@ class Parser {
             for (const sheet in allDetails) {
                 const vin = sheet;
                 const details = allDetails[sheet];
-                const bar = multibar.create(1, 0, {
-                    speed: "N/A"
-                });
-                detailsRequests.push(this.parseDetails(vin, details, bar));
+                const pBars = {};
+                if (this.settings.PARSERS.AUTODOC === 'Y') {
+                    pBars['AUTODOC'] = multibar.create(1, 0, {
+                        speed: "N/A"
+                    });
+                }
+                if (this.settings.PARSERS.EMEX === 'Y') {
+                    pBars['EMEX'] = multibar.create(1, 0, {
+                        speed: "N/A"
+                    });
+                }
+                detailsRequests.push(this.parseDetails(vin, details, pBars));
             }
 
             const details = await Promise.all(detailsRequests);
@@ -118,12 +134,12 @@ class Parser {
     /**
      * Сначала ищет набор деталей по VIN номеру, а потом предложения о покупке
      *
-     * @param vin       {string}        VIN номер
-     * @param pBar      {GenericBar}    Progress bar
-     * @returns {Promise<{vin: {}}>}
+     * @param vin   {string}                VIN номер
+     * @param pBars {Object<{AUTODOC:GenericBar,EMEX:GenericBar}>}    Progress bar
+     * @returns     {Promise<{vin: {}}>}
      */
-    async parseVins(vin, pBar) {
-        const detailsInfo = await this.autodoc.parseVin(vin, pBar);
+    async parseVins(vin, pBars) {
+        const detailsInfo = await this.autodoc.parseVin(vin, pBars['AUTODOC']);
 
         if (this.settings.OUTPUT.CREATE_VINS_FILE === 'Y')
         {
@@ -138,7 +154,7 @@ class Parser {
             }
         }
 
-        const detailOffers = await this.parseDetails(vin, detailsInfo, pBar);
+        const detailOffers = await this.parseDetails(vin, detailsInfo, pBars);
         return {
             vin: detailOffers
         };
@@ -147,20 +163,21 @@ class Parser {
     /**
      * Запускает парсеры деталей
      *
-     * @param vin       {string}        VIN номер
-     * @param details   {Object[]}      Массив с деталями
-     * @param pBar      {GenericBar}    Progress bar
+     * @param vin       {string}                VIN номер
+     * @param details   {Object[]}              Массив с деталями
+     * @param pBars     {Object<{AUTODOC: GenericBar, EMEX: GenericBar}>}    Progress bar
      * @returns {Promise<{}>}           Объект, где ключ - номер детали, а значение - информация о деталях
      */
-    async parseDetails(vin, details, pBar) {
+    async parseDetails(vin, details, pBars) {
         const detailsRequests = [];
 
-        if (this.settings.PARSERS.EMEX === 'Y') {
-            detailsRequests.push(this.emex.getDetailOffers(details, pBar));
-        }
         if (this.settings.PARSERS.AUTODOC === 'Y') {
             const account = this.getUniqueAutodocAccount();
-            detailsRequests.push(this.autodoc.getDetailOffers(details, account, pBar));
+            detailsRequests.push(this.autodoc.getDetailOffers(details, account, pBars['AUTODOC']));
+        }
+
+        if (this.settings.PARSERS.EMEX === 'Y') {
+            detailsRequests.push(this.emex.getDetailOffers(details, pBars['EMEX']));
         }
 
         let detailsResponses = await Promise.all(detailsRequests);
@@ -181,7 +198,6 @@ class Parser {
             this.offersObj[vin] = outputData;
         }
 
-        pBar.stop();
         return outputData;
     }
 

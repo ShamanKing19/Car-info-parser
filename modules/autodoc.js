@@ -8,84 +8,193 @@ class Autodoc {
 
 
     async getDetailOffers(details, account, pBar) {
-        const loginAttempts = ["DC1/O1127x9ZL4GU2bhQgg==", "W7F+x+sPZUPsCAcXwYSH5Q=="];
-        const randomIndex = Math.floor(Math.random() * loginAttempts.length);
-        const attempt = loginAttempts[randomIndex];
+        const detailItemsObj = {};
 
-        pBar.setTotal(3);
+        pBar.update(0);
+        pBar.setTotal(details.length);
 
-        const challengeGuid = await this.getChallengeGuid();
-        pBar.increment();
         const tokenData = await this.getAuthToken(account);
-        if (!tokenData) return false;
-        pBar.increment();
-        const session = await this.logIn(challengeGuid, tokenData, attempt, account);
-        if (!session) return false;
-        pBar.increment();
+        if (!tokenData) {
+            // TODO: Сделать перезаход через другой аккаунт
+            console.log('\nAccount', account, 'has been banned :(');
+            pBar.stop();
+            return false;
+        }
+
+        const requestHeaders = {
+            'authorization': tokenData['token_type'] + ' ' + tokenData['access_token'],
+            'source_': 'Site2',
+            'origin': 'https://www.autodoc.ru',
+            'referer': 'https://www.autodoc.ru/',
+        };
 
         const requests = [];
-        pBar.setTotal(details.length);
         for (const detail of details) {
-            requests.push(this.parseDetail(detail, session, attempt, pBar));
+            requests.push(this.parseDetail(detail, requestHeaders, pBar));
+
+            detailItemsObj[detail] = {
+                'DETAIL_NUMBER': detail['PART_NUMBER'],
+                'DETAIL_NAME': detail['PART_NAME'],
+                'DETAIL_OFFERS': []
+            };
+            if (
+                this.settings.DEBUG.LIMIT === 'Y'
+                && parseInt(this.settings.DEBUG.LIMIT_COUNT) < requests.length
+            ) {
+                break;
+            }
         }
 
         const responses = await Promise.all(requests);
 
+        for (const response of responses) {
+            if (!response) continue;
+            for (const parsedDetail of response) {
+                const originalDetailNumber = parsedDetail['ORIGINAL_DETAIL_NUMBER'];
+                const originalDetailName = parsedDetail['ORIGINAL_DETAIL_NAME'];
 
+                if (!(originalDetailNumber in detailItemsObj)) {
+                    detailItemsObj[originalDetailNumber] = {
+                        'DETAIL_NUMBER': originalDetailNumber,
+                        'DETAIL_NAME': originalDetailName,
+                        'DETAIL_OFFERS': [parsedDetail]
+                    };
+                } else {
+                    detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(parsedDetail);
+                }
+            }
+        }
+        return detailItemsObj;
     }
 
 
-    async parseDetail(detail, session, attempt, pBar) {
-        let detailNumber = detail['PART_NUMBER'];
-        let detailName = detail['PART_NAME'];
-        const clearDetailNumber = detailNumber.replaceAll('-', '').replaceAll(' ', '');
+    async parseDetail(detail, requestHeaders, pBar) {
+        const originalDetailNumber = detail['PART_NUMBER'];
+        const originalDetailName = detail['PART_NAME'];
+        const clearDetailNumber = originalDetailNumber.replaceAll('-', '').replaceAll(' ', '');
 
-        const manufacturerList = await this.getManufacturerInfo(clearDetailNumber, session);
+        const manufacturerList = await this.getManufacturerInfo(clearDetailNumber);
 
-        if (!manufacturerList) return false;
+        if (!manufacturerList || manufacturerList.length === 0) {
+            pBar.increment();
+            return false;
+        }
 
-        const requests = [];
+        const detailsInfo = [];
         for (const manufacturer of manufacturerList) {
             const manufacturerId = manufacturer['id'];
             const manufacturerName = manufacturer['manufacturerName'];
-            detailNumber = manufacturer['artNumber'] ?? detailNumber;
-            detailName = manufacturer['partName'] ?? detailName;
+            const detailNumber = manufacturer['artNumber'] ?? originalDetailNumber;
+            const detailName = manufacturer['partName'] ?? originalDetailName;
 
-            requests.push(this.getDetailInfoByManufacturer(session, manufacturerId, detailNumber, attempt, pBar));
+            const details = await this.getDetailInfoByManufacturer(manufacturerId, detailNumber, requestHeaders);
+
+            const originals = details['originals'];
+            const analogs = details['analogs'];
+
+            if (originals.length === 0 && analogs.length === 0) continue;
+
+            if (Array.isArray(originals))
+            {
+                for (const offer of originals)
+                {
+                    const deliveryTime = offer['deliveryDays'];
+
+                    if (parseInt(deliveryTime) > parseInt(this.settings.SETTINGS.DELIVERY_LIMIT)) {
+                        continue;
+                    }
+
+                    const detailInfo = {
+                        'TYPE': 'original',
+                        'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
+                        'ORIGINAL_DETAIL_NAME': originalDetailName,
+                        'DETAIL_NUMBER': detailNumber,
+                        'DETAIL_NAME': detailName,
+                        'PRICE': offer['price'],
+                        'DELIVERY': deliveryTime,
+                        'MINIMAL_DELIVERY': offer['minimalDeliveryDays'], // Можно убрать
+                        'QUANTITY': offer['quantity'],
+                        'MANUFACTURER': manufacturerName,
+                    };
+                    detailsInfo.push(detailInfo);
+                }
+            } else {
+                console.log('not array', originals);
+            }
+
+            if (Array.isArray(analogs)) {
+                for (const offer of analogs) {
+                    const detailInfo = {
+                        'TYPE': 'original',
+                        'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
+                        'ORIGINAL_DETAIL_NAME': originalDetailName,
+                        'DETAIL_NUMBER': detailNumber,
+                        'DETAIL_NAME': detailName,
+                        'PRICE': offer['price'],
+                        'DELIVERY': offer['deliveryDays'],
+                        'MINIMAL_DELIVERY': offer['minimalDeliveryDays'], // Можно убрать
+                        'QUANTITY': offer['quantity'],
+                        'MANUFACTURER': manufacturerName,
+                    };
+                    detailsInfo.push(detailInfo);
+                }
+            } else {
+                console.log('not array', analogs);
+            }
         }
 
-        const responses = await Promise.all(requests);
+        pBar.increment();
+        if (detailsInfo.length !== 0) {
+            return detailsInfo;
+        }
+        return false;
     }
 
 
     /**
+     * Получает информацию о предложениях по детали
      *
-     *
-     * @param session {AxiosInstance}
      * @param manufacturerId
      * @param detailNumber
-     * @param attempt
-     * @param pBar
-     * @return {Promise<void>}
+     * @param requestHeaders
+     * @return {Promise<{analogs, originals}>}
      */
-    async getDetailInfoByManufacturer(session, manufacturerId, detailNumber, attempt, pBar) {
-        const originalsUrl = `https://webapi.autodoc.ru/api/spareparts/${manufacturerId}/${detailNumber}/2?framesId=undefined&attempt=${attempt}&isrecross=false`;
-        const analogsUrl = `https://webapi.autodoc.ru/api/spareparts/analogs/${manufacturerId}/${detailNumber}/2`;
+    async getDetailInfoByManufacturer(manufacturerId, detailNumber, requestHeaders) {
+        const originalsUrl = `https://webapi.autodoc.ru/api/spareparts/${manufacturerId}/${detailNumber}/2?isrecross=false`;
+        // const analogsUrl = `https://webapi.autodoc.ru/api/spareparts/analogs/${manufacturerId}/${detailNumber}/2`;
 
-        session.defaults.headers.common['hash_'] = await this.getHash(manufacturerId, detailNumber);
-        session.defaults.headers.common['dnt'] = '1';
-        session.defaults.headers.common['source_'] = 'Site2';
+        requestHeaders['hash_'] = await this.getHash(manufacturerId, detailNumber);
 
-        const originalsRequest = session.get(originalsUrl);
-        const analogsRequest = session.get(analogsUrl);
+        const config = {
+            headers: requestHeaders
+        };
 
-        const responses = await Promise.all([originalsRequest, analogsRequest]);
+        // TODO: Заменить на tryGet и выяснить, почему с ним ничего не работает (пустые ответы)
+        //  Скорее всего не устанавливается конфиг
+        const originalsRequest = this.functions.axios.get(originalsUrl, config);
+        // const analogsRequest = this.functions.axios.get(analogsUrl, config);
 
-        const originalsResponse = responses[0];
-        const analogsResponse = responses[1];
+        let response;
+        // TODO: Убрать отсюда try catch
+        try {
+            // responses = await Promise.all([originalsRequest, analogsRequest]);
+            response = await originalsRequest;
+        } catch (e) {
+            return {
+                'originals' : [],
+                'analogs' : [],
+            }
+        }
 
-        // console.log(originalsResponse.data);
-        pBar.increment();
+        // const originalsResponse = responses[0];
+        // const analogsResponse = responses[1];
+
+        return {
+            // 'originals': originalsResponse.data['inventoryItems'],
+            // 'analogs': analogsResponse.data['inventoryItems']
+            'originals': response.data['inventoryItems'],
+            'analogs': []
+        };
 
     }
 
@@ -97,14 +206,15 @@ class Autodoc {
     }
 
 
-    async getManufacturerInfo(detailNumber, session, pBar) {
+    async getManufacturerInfo(detailNumber) {
         const url = `https://webapi.autodoc.ru/api/manufacturers/${encodeURIComponent(detailNumber)}?showAll=false`;
+        let response;
         try {
-            const response = await session.get(url);
-            return response.data;
+            response = await this.functions.axios.get(url);
         } catch (e) {
             return false;
         }
+        return response.data;
     }
 
 
@@ -127,7 +237,6 @@ class Autodoc {
                 timeout: 3000
             });
         } catch (e) {
-            // console.log(e);
             return false;
         }
         return axiosInstance;
@@ -153,7 +262,6 @@ class Autodoc {
                 },
             });
         } catch (e) {
-            console.log(e);
             return false;
         }
 

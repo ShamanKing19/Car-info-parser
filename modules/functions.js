@@ -227,6 +227,7 @@ class Functions {
         };
 
         for (const page in data) {
+            if (data[page].length === 0) continue;
             const sheet = this.xlsx.utils.json_to_sheet(data[page]);
             this.xlsx.utils.book_append_sheet(book, sheet, page);
         }

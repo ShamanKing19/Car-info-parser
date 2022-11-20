@@ -1,7 +1,6 @@
 class Parser {
     vinsAndPartsObj = {}; // Для записи деталей и их названий в один файл
     offersObj = {};
-    autodocAccounts;
     autodoc;
     emex;
 

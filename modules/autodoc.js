@@ -24,9 +24,9 @@ class Autodoc {
         while (this.accounts.length > 0 && !tokenData) {
             const account = this.getUniqueAccount();
             tokenData = await this.getAuthToken(account);
-            if (!tokenData) {
-                console.log('\nAccount', account, 'has been banned :(');
-            }
+            // if (!tokenData) {
+            //     console.log('\nAccount', account, 'has been banned :(');
+            // }
         }
 
         const requestHeaders = {

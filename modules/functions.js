@@ -166,7 +166,7 @@ class Functions {
 
         for (const sheetName in sheets) {
             const sheet = sheets[sheetName];
-            data[sheetName] = this.xlsx.utils.sheet_to_json(sheet);
+            data[sheetName.trim()] = this.xlsx.utils.sheet_to_json(sheet);
         }
 
         return data;
@@ -226,10 +226,55 @@ class Functions {
             bookType: 'xlsx',
         };
 
+        let notEmptyPages = 0;
         for (const page in data) {
-            if (data[page].length === 0) continue;
+            if (data[page].length === 0) {
+                continue;
+            }
             const sheet = this.xlsx.utils.json_to_sheet(data[page]);
             this.xlsx.utils.book_append_sheet(book, sheet, page);
+            notEmptyPages++;
+        }
+
+        if (notEmptyPages > 0) {
+            await this.xlsx.writeFileAsync(filepath, book, options, () => {});
+        }
+    }
+
+
+    /**
+     * Создаёт .xlsx файл если его не существует из объекта
+     *
+     * @param filepath  {string} Путь до файла (с расширением .xlsx!)
+     * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
+     */
+    async createSingleXLSCFromObjectAsync(filepath, data) {
+        if (this.fs.existsSync(filepath)) return;
+
+        const dirs = filepath.split('/');
+        const filename = dirs.pop();
+        if (dirs.length !== 0) {
+            await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
+        }
+
+        const book = this.xlsx.utils.book_new();
+
+        const options = {
+            // type: 'buffer', // С этим тоже работает
+            type: 'string',
+            bookType: 'xlsx',
+        };
+
+        for (const page in data)
+        {
+            const vins = data[page];
+            for (const vin in vins)
+            {
+                const details = vins[vin];
+                if (details.length === 0) continue;
+                const sheet = this.xlsx.utils.json_to_sheet(details);
+                this.xlsx.utils.book_append_sheet(book, sheet, page);
+            }
         }
 
         await this.xlsx.writeFileAsync(filepath, book, options, () => {});

@@ -1,5 +1,7 @@
 class Autodoc {
-    settings; // Устанавливаются вместе с инициализацией
+    // Устанавливаются вместе с инициализацией
+    settings;
+    accounts;
 
     constructor() {
         this.functions = require('./functions');
@@ -7,18 +9,24 @@ class Autodoc {
     }
 
 
-    async getDetailOffers(details, account, pBar) {
+    async getDetailOffers(details, pBar) {
+        const inputDirname = this.settings.INPUT.DIRNAME;
+        const accountsFilename = this.settings.INPUT.ACCOUNTS;
+        const accountsFilePath = `${inputDirname}/${accountsFilename}`.replaceAll('//', '/');
+        this.accounts = await this.getAccounts(accountsFilePath);
+
         const detailItemsObj = {};
 
         pBar.update(0);
         pBar.setTotal(details.length);
 
-        const tokenData = await this.getAuthToken(account);
-        if (!tokenData) {
-            // TODO: Сделать перезаход через другой аккаунт
-            console.log('\nAccount', account, 'has been banned :(');
-            pBar.stop();
-            return false;
+        let tokenData;
+        while (this.accounts.length > 0 && !tokenData) {
+            const account = this.getUniqueAccount();
+            tokenData = await this.getAuthToken(account);
+            if (!tokenData) {
+                console.log('\nAccount', account, 'has been banned :(');
+            }
         }
 
         const requestHeaders = {
@@ -438,6 +446,47 @@ class Autodoc {
         }
 
         return items;
+    }
+
+
+    getUniqueAccount() {
+        const randomIndex = Math.floor(Math.random() * this.accounts.length);
+        const account = this.accounts[randomIndex];
+        if (this.accounts.length > 1) {
+            this.accounts.splice(randomIndex, 1);
+        }
+        return account;
+    }
+
+
+    /**
+     * Читает файл с аккаунтами для autodoc.ru
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<Object[]>}
+     */
+    async getAccounts(filepath) {
+        await this.createAccountsFileIfNotExistsAsync(filepath);
+        return this.functions.readXLSX(filepath);
+    }
+
+
+    /**
+     * Создаёт файл с аккаутнами если его нет
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<void>}
+     */
+    async createAccountsFileIfNotExistsAsync(filepath) {
+        const headers = {
+            'ACCOUNTS': [
+                {
+                    'LOGIN': '',
+                    'PASSWORD': ''
+                }
+            ]
+        };
+        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 

@@ -22,11 +22,11 @@ class Parser {
         const inputDirname = settings.INPUT.DIRNAME;
         const vinsFile = settings.INPUT.VINS_FILE;
         const detailsFile = settings.INPUT.DETAILS_FILE;
-        const accountsFile = settings.INPUT.ACCOUNTS;
+        // const accountsFile = settings.INPUT.ACCOUNTS;
 
         const vinsFilePath = `${inputDirname}/${vinsFile}`.replaceAll('//', '/');
         const detailsFilePath = `${inputDirname}/${detailsFile}`.replaceAll('//', '/');
-        const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
+        // const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
 
         this.settings = settings;
 
@@ -42,8 +42,7 @@ class Parser {
         }
 
         if (settings.PARSERS.AUTODOC === "Y") {
-            this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
-            this.autodocAccounts = await this.getAutodocAccounts(accountsFilePath);
+            this.autodoc = require('./autodoc');
             this.autodoc.settings = settings;
         }
 
@@ -172,8 +171,7 @@ class Parser {
         const detailsRequests = [];
 
         if (this.settings.PARSERS.AUTODOC === 'Y') {
-            const account = this.getUniqueAutodocAccount();
-            detailsRequests.push(this.autodoc.getDetailOffers(details, account, pBars['AUTODOC']));
+            detailsRequests.push(this.autodoc.getDetailOffers(details, pBars['AUTODOC']));
         }
 
         if (this.settings.PARSERS.EMEX === 'Y') {
@@ -199,16 +197,6 @@ class Parser {
         }
 
         return outputData;
-    }
-
-
-    getUniqueAutodocAccount() {
-        const randomIndex = Math.floor(Math.random() * this.autodocAccounts.length);
-        const account = this.autodocAccounts[randomIndex];
-        if (this.autodocAccounts.length > 1) {
-            this.autodocAccounts.splice(randomIndex, 1);
-        }
-        return account;
     }
 
 
@@ -338,18 +326,6 @@ class Parser {
 
 
     /**
-     * Читает файл с аккаунтами для autodoc.ru
-     *
-     * @param filepath  {string}    Путь к файлу
-     * @returns {Promise<Object[]>}
-     */
-    async getAutodocAccounts(filepath) {
-        await this.createAccountsFileIfNotExistsAsync(filepath);
-        return this.functions.readXLSX(filepath);
-    }
-
-
-    /**
      * Читает файл с VIN номерами
      *
      * @param filepath  {string}    Путь к файлу
@@ -404,25 +380,6 @@ class Parser {
                     'CATEGORY': '',
                     'DETAIL_NAME': '',
                     'DETAIL_NUMBER': ''
-                }
-            ]
-        };
-        await this.functions.createXLSCFromObjectAsync(filepath, headers);
-    }
-
-
-    /**
-     * Создаёт файл с аккаутнами если его нет
-     *
-     * @param filepath  {string}    Путь к файлу
-     * @returns {Promise<void>}
-     */
-    async createAccountsFileIfNotExistsAsync(filepath) {
-        const headers = {
-            'ACCOUNTS': [
-                {
-                    'LOGIN': '',
-                    'PASSWORD': ''
                 }
             ]
         };

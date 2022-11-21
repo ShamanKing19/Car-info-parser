@@ -11,10 +11,11 @@ class Emex {
      * Ищет предложения по номерам деталей
      *
      * @param details   {Object[]}      Массив с деталями
+     * @param portion   {int}           Максимальная порция запросов для парсера emex.ru
      * @param pBar      {GenericBar}    Progress bar
      * @return          {Object}        Объект, где ключ - номер детали
      */
-    async getDetailOffers(details, pBar) {
+    async getDetailOffers(details, portion, pBar) {
         pBar.setTotal(details.length);
         let requests = [];
         let responses = [];
@@ -33,7 +34,7 @@ class Emex {
                 const detailNumber = detail.PART_NUMBER;
                 requests.push(this.requestDetail(detailNumber, pBar));
                 detailsCount++;
-                if (requests.length === this.requestPortion) {
+                if (requests.length >= portion) {
                     const results = await Promise.all(requests);
                     responses = responses.concat(results);
                     requests = [];

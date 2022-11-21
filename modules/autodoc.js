@@ -15,7 +15,13 @@ class Autodoc {
         const accountsFilePath = `${inputDirname}/${accountsFilename}`.replaceAll('//', '/');
         this.accounts = await this.getAccounts(accountsFilePath);
 
+        let responses = [];
         const detailItemsObj = {};
+        let cycles = 1;
+
+        if (this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
+            cycles = this.settings.SETTINGS.REPEAT_DETAIL_CYCLES;
+        }
 
         pBar.update(0);
         pBar.setTotal(details.length);
@@ -36,24 +42,30 @@ class Autodoc {
             'referer': 'https://www.autodoc.ru/',
         };
 
-        const requests = [];
-        for (const detail of details) {
-            requests.push(this.parseDetail(detail, requestHeaders, pBar));
+        for (let cycle = 0; cycle < cycles; cycle++)
+        {
+            const requests = [];
 
-            detailItemsObj[detail] = {
-                'DETAIL_NUMBER': detail['PART_NUMBER'],
-                'DETAIL_NAME': detail['PART_NAME'],
-                'DETAIL_OFFERS': []
-            };
-            if (
-                this.settings.DEBUG.LIMIT === 'Y'
-                && parseInt(this.settings.DEBUG.LIMIT_COUNT) < requests.length
-            ) {
-                break;
+            for (const detail of details)
+            {
+                requests.push(this.parseDetail(detail, requestHeaders, pBar));
+
+                detailItemsObj[detail] = {
+                    'DETAIL_NUMBER': detail['PART_NUMBER'],
+                    'DETAIL_NAME': detail['PART_NAME'],
+                    'DETAIL_OFFERS': []
+                };
+                if (
+                    this.settings.DEBUG.LIMIT === 'Y'
+                    && parseInt(this.settings.DEBUG.LIMIT_COUNT) < requests.length
+                ) {
+                    break;
+                }
             }
+            pBar.update(0);
+            const results = await Promise.all(requests);
+            responses = responses.concat(results);
         }
-
-        const responses = await Promise.all(requests);
 
         for (const response of responses) {
             if (!response) continue;

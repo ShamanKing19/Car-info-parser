@@ -3,6 +3,7 @@ class Parser {
     offersObj = {};
     autodoc;
     emex;
+    emexPortion = 10;
 
 
     constructor() {
@@ -68,18 +69,20 @@ class Parser {
         {
             for (const sheet in vins)
             {
+                this.emexPortion /= vins[sheet].length;
                 for (const row of vins[sheet])
                 {
                     const vin = row.VINS;
                     const pBars = {};
+
                     if (this.settings.PARSERS.AUTODOC === 'Y') {
                         pBars['AUTODOC'] = multibar.create(1, 0, {
-                            speed: "N/A"
+                            speed: 'N/A'
                         });
                     }
                     if (this.settings.PARSERS.EMEX === 'Y') {
                         pBars['EMEX'] = multibar.create(1, 0, {
-                            speed: "N/A"
+                            speed: 'N/A'
                         });
                     }
 
@@ -99,18 +102,21 @@ class Parser {
             // Старт со списка деталей
             const detailsRequests = [];
 
+            this.emexPortion /= Object.keys(allDetails).length;
+
             for (const sheet in allDetails) {
                 const vin = sheet;
                 const details = allDetails[sheet];
                 const pBars = {};
+
                 if (this.settings.PARSERS.AUTODOC === 'Y') {
                     pBars['AUTODOC'] = multibar.create(1, 0, {
-                        speed: "N/A"
+                        speed: 'N/A'
                     });
                 }
                 if (this.settings.PARSERS.EMEX === 'Y') {
                     pBars['EMEX'] = multibar.create(1, 0, {
-                        speed: "N/A"
+                        speed: 'N/A'
                     });
                 }
                 detailsRequests.push(this.parseDetails(vin, details, pBars));
@@ -137,7 +143,13 @@ class Parser {
      * @returns     {Promise<{vin: {}}>}
      */
     async parseVins(vin, pBars) {
-        const detailsInfo = await this.autodoc.parseVin(vin, pBars['AUTODOC']);
+        let vinsPbar;
+        if (this.settings.PARSERS.AUTODOC === 'Y') {
+            vinsPbar = pBars['AUTODOC'];
+        } else if(this.settings.PARSERS.EMEX === 'Y') {
+            vinsPbar = pBars['EMEX'];
+        }
+        const detailsInfo = await this.autodoc.parseVin(vin, vinsPbar);
 
         if (this.settings.OUTPUT.CREATE_VINS_FILE === 'Y')
         {
@@ -174,7 +186,7 @@ class Parser {
         }
 
         if (this.settings.PARSERS.EMEX === 'Y') {
-            detailsRequests.push(this.emex.getDetailOffers(details, pBars['EMEX']));
+            detailsRequests.push(this.emex.getDetailOffers(details, Math.floor(this.emexPortion), pBars['EMEX']));
         }
 
         let detailsResponses = await Promise.all(detailsRequests);
@@ -192,7 +204,7 @@ class Parser {
             const filename = `${today} ${vin}.xlsx`;
             await this.functions.createXLSCFromObjectAsync(outputDir + '/' + filename, outputData);
         } else {
-            this.offersObj[vin] = outputData;
+            this.offersObj[vin] = outputData[vin];
         }
 
         return outputData;

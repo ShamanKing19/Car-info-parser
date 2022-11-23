@@ -4,7 +4,26 @@
   "description": "",
   "main": "app.js",
   "scripts": {
+    "build": "pkg .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": "app.js",
+  "pkg": {
+    "targets": [
+      "node16-win-x64"
+    ],
+    "scripts": [
+      "modules/autodoc.js",
+      "modules/emex.js",
+      "modules/functions.js",
+      "modules/logger.js",
+      "modules/parser.js",
+      "modules/settings.js"
+    ],
+    "assets": [
+      "node_modules/"
+    ],
+    "outputPath": "exe"
   },
   "author": "ShamanKing19",
   "license": "ISC",

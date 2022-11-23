@@ -1,9 +1,9 @@
 class Functions {
     fs = require('fs');
     xlsx = require('xlsx');
-    axios = require('axios');
     UserAgent = require('user-agents');
     CliProgress = require('cli-progress');
+    axios = require('axios');
 
     sleepTime = 500;
 

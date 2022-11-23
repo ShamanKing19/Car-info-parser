@@ -1,16 +1,33 @@
 class Logger {
     fs = require('fs');
+    logsDir = process.cwd() + '/logs';
+    logsPath = `${this.logsDir}/log.txt`;
+    errorsPath = `${this.logsDir}/error.txt`;
 
-    log(message) {
-        console.log(message);
+    async log(message) {
+        if (!this.fs.existsSync(this.logsDir)) {
+            await this.fs.mkdir(this.logsDir, () => {});
+        }
+
+        const formattedMessage = '\n' + message;
+        await this.fs.appendFile(this.logsPath, formattedMessage, () => {
+            // console.log(message);
+        });
     }
 
-    error(message) {
-        console.error(message);
+    async error(message) {
+        if (!this.fs.existsSync(this.logsDir)) {
+            await this.fs.mkdir(this.logsDir, () => {});
+        }
+
+        const formattedMessage = '\n' + message;
+        await this.fs.appendFile(this.errorsPath, formattedMessage, () => {
+            // console.log(message);
+        });
     }
 
     async json(filename, data) {
-        const dirPath = __dirname + '/../logs';
+        const dirPath = './../logs';
 
         if (!this.fs.existsSync(dirPath)) {
             this.fs.mkdir(dirPath, () => {

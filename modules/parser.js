@@ -7,8 +7,8 @@ class Parser {
 
 
     constructor() {
-        this.functions = require(__dirname + '/functions');
-        this.logger = require(__dirname + '/logger');
+        this.functions = require('./functions');
+        this.logger = require('./logger');
     }
 
 
@@ -22,18 +22,22 @@ class Parser {
         const inputDirname = settings.INPUT.DIRNAME;
         const vinsFile = settings.INPUT.VINS_FILE;
         const detailsFile = settings.INPUT.DETAILS_FILE;
-        // const accountsFile = settings.INPUT.ACCOUNTS;
+        const accountsFile = settings.INPUT.ACCOUNTS;
 
         const vinsFilePath = `${inputDirname}/${vinsFile}`.replaceAll('//', '/');
         const detailsFilePath = `${inputDirname}/${detailsFile}`.replaceAll('//', '/');
-        // const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
+        const accountsFilePath = `${inputDirname}/${accountsFile}`.replaceAll('//', '/');
+
+        await this.createVinsInputFileIfNotExistsAsync(vinsFilePath);
+        await this.createDetailsInputFileIfNotExistsAsync(detailsFilePath);
+        await this.createAccountsFileIfNotExistsAsync(accountsFilePath);
 
         this.settings = settings;
 
         let vins = [];
         let details = [];
 
-        if (settings.STARTUP.START_FROM_VINS === "Y") {
+        if (settings.STARTUP.START_FROM_VINS === 'Y') {
             this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
             this.autodoc.settings = settings;
             vins = await this.getVins(vinsFilePath);
@@ -41,7 +45,7 @@ class Parser {
             details = await this.getDetails(detailsFilePath);
         }
 
-        if (settings.PARSERS.AUTODOC === "Y") {
+        if (settings.PARSERS.AUTODOC === 'Y') {
             this.autodoc = require('./autodoc');
             this.autodoc.settings = settings;
         }
@@ -131,7 +135,7 @@ class Parser {
                 await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
             }
         }
-        console.log('Парсинг завершён!');
+        console.log('\n\n\n\n\nПарсинг завершён!');
     }
 
 
@@ -343,7 +347,6 @@ class Parser {
      * @returns {Promise<Object[]>}
      */
     async getVins(filepath) {
-        await this.createVinsInputFileIfNotExistsAsync(filepath);
         return this.functions.readXLSXByPage(filepath);
     }
 
@@ -355,8 +358,26 @@ class Parser {
      * @returns {Promise<Object[]>}
      */
     async getDetails(filepath) {
-        await this.createDetailsInputFileIfNotExistsAsync(filepath);
         return this.functions.readXLSXByPage(filepath);
+    }
+
+
+    /**
+     * Создаёт файл с аккаутнами если его нет
+     *
+     * @param filepath  {string}    Путь к файлу
+     * @returns {Promise<void>}
+     */
+    async createAccountsFileIfNotExistsAsync(filepath) {
+        const headers = {
+            'ACCOUNTS': [
+                {
+                    'LOGIN': '',
+                    'PASSWORD': ''
+                }
+            ]
+        };
+        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 
@@ -388,7 +409,7 @@ class Parser {
         const headers = {
             'DETAILS' : [
                 {
-                    'CATEGORY': '',
+                    // 'CATEGORY': '',
                     'DETAIL_NAME': '',
                     'DETAIL_NUMBER': ''
                 }

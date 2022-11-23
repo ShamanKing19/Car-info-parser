@@ -29,10 +29,15 @@ class Autodoc {
         let tokenData;
         while (this.accounts.length > 0 && !tokenData) {
             const account = this.getUniqueAccount();
+            if (!account) {
+                await this.logger.log(`Не осталось рабочих аккаунтов`);
+                pBar.stop();
+                return [];
+            }
             tokenData = await this.getAuthToken(account);
-            // if (!tokenData) {
-            //     console.log('\nAccount', account, 'has been banned :(');
-            // }
+            if (!tokenData) {
+                await this.logger.log(`Account ${account['LOGIN']} has been banned`);
+            }
         }
 
         const requestHeaders = {
@@ -324,7 +329,7 @@ class Autodoc {
         const modifications = vinData['specificAttributes'];
 
         if (!primaryData) {
-            this.logger.log(`No primary data at ${vin}`);
+            await this.logger.log(`No primary data at ${vin}`);
             return [];
         }
 
@@ -464,8 +469,10 @@ class Autodoc {
     getUniqueAccount() {
         const randomIndex = Math.floor(Math.random() * this.accounts.length);
         const account = this.accounts[randomIndex];
-        if (this.accounts.length > 1) {
+        if (this.accounts.length > 0) {
             this.accounts.splice(randomIndex, 1);
+        } else {
+            return false;
         }
         return account;
     }
@@ -478,27 +485,7 @@ class Autodoc {
      * @returns {Promise<Object[]>}
      */
     async getAccounts(filepath) {
-        await this.createAccountsFileIfNotExistsAsync(filepath);
         return this.functions.readXLSX(filepath);
-    }
-
-
-    /**
-     * Создаёт файл с аккаутнами если его нет
-     *
-     * @param filepath  {string}    Путь к файлу
-     * @returns {Promise<void>}
-     */
-    async createAccountsFileIfNotExistsAsync(filepath) {
-        const headers = {
-            'ACCOUNTS': [
-                {
-                    'LOGIN': '',
-                    'PASSWORD': ''
-                }
-            ]
-        };
-        await this.functions.createXLSCFromObjectAsync(filepath, headers);
     }
 
 

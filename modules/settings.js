@@ -43,7 +43,7 @@ class Settings {
                 },
                 SETTINGS: {
                     DELIVERY_LIMIT: 30,
-                    REPEAT_DETAIL_CYCLES: 3,
+                    REPEAT_DETAIL_CYCLES: 1,
                     SHOW_IF_NOT_FOUND: 'Y',
                 },
                 PARSERS: {

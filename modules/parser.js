@@ -131,7 +131,6 @@ class Parser {
             if (this.settings.OUTPUT.DETAILS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
                 const outputDir = this.settings.OUTPUT.DIRNAME;
-                // TODO: Починить, ломается здесь
                 await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} DETAILS.xlsx`, this.offersObj);
             }
         }
@@ -226,8 +225,8 @@ class Parser {
                 outputData[vin].push({
                     'Искомый номер': originalDetailNumber,
                     'Номер': '',
-                    'Название': 'Нет в наличии',
-                    'Цена': '',
+                    'Название': originalDetailName,
+                    'Цена': 'Нет в наличии',
                     'Доставка': '',
                     'Количество': '',
                     'Производитель': '',
@@ -292,7 +291,7 @@ class Parser {
                 avgPrice = sumPrice / detailInfo['DETAIL_OFFERS'].length;
                 avgDelivery = sumDelivery / detailInfo['DETAIL_OFFERS'].length;
             } else {
-                detailName = 'Нет в наличии';
+                avgPrice = 'Нет в наличии';
             }
 
             outputData[vin].push({

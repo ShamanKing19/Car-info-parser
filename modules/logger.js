@@ -9,18 +9,23 @@ class Logger {
             await this.fs.mkdir(this.logsDir, () => {});
         }
 
-        const formattedMessage = '\n' + message;
+        const now = new Date().toLocaleString();
+        const formattedMessage = now + ': ' + message + '\n';
         await this.fs.appendFile(this.logsPath, formattedMessage, () => {
             // console.log(message);
         });
     }
 
-    async error(message) {
+    async error(message, debug = false) {
+        if (debug) {
+            console.log(message);
+        }
+
         if (!this.fs.existsSync(this.logsDir)) {
             await this.fs.mkdir(this.logsDir, () => {});
         }
-
-        const formattedMessage = '\n' + message;
+        const now = new Date().toLocaleString();
+        const formattedMessage = now + ': ' + message + '\n';
         await this.fs.appendFile(this.errorsPath, formattedMessage, () => {
             // console.log(message);
         });

@@ -2,6 +2,7 @@ class Autodoc {
     // Устанавливаются вместе с инициализацией
     settings;
     accounts;
+    tokensDir = './tokens';
 
     constructor() {
         this.functions = require('./functions');
@@ -30,14 +31,26 @@ class Autodoc {
         while (this.accounts.length > 0 && !tokenData) {
             const account = this.getUniqueAccount();
             if (!account) {
-                await this.logger.log(`Не осталось рабочих аккаунтов`);
                 pBar.stop();
-                return [];
+                break;
             }
+
+            // TODO: Разобраться как использовать refresh_token
+            // const authData = await this.getRefreshToken(account['LOGIN']);
             tokenData = await this.getAuthToken(account);
+
             if (!tokenData) {
                 await this.logger.log(`Account ${account['LOGIN']} has been banned`);
             }
+
+            if (!tokenData && this.accounts.length === 1) {
+                await this.logger.error(`Не осталось рабочих аккаунтов`);
+                break;
+            }
+        }
+
+        if (!tokenData) {
+            return;
         }
 
         const requestHeaders = {
@@ -224,6 +237,29 @@ class Autodoc {
     }
 
 
+    async saveRefreshToken(login, refreshToken, expires) {
+        const data = {
+            'login': login,
+            'refreshToken': refreshToken,
+            'now': new Date().valueOf(),
+            'expires': new Date().valueOf() + expires
+        };
+
+        await this.functions.writeJson(`./${this.tokensDir}/${login}.json`, JSON.stringify(data));
+    }
+
+
+    getRefreshToken(login) {
+        try {
+            const data = this.functions.readJson(`./${this.tokensDir}/${login}.json`);
+            return data;
+        } catch (e) {
+            this.logger.error(e, true);
+            return;
+        }
+    }
+
+
     async getHash(manufacturerId, detailNumber) {
         const url = `https://webapi.autodoc.ru/api/spareparts/hash/${manufacturerId}/${detailNumber}`;
         const response = await this.functions.tryPost(url, {});
@@ -272,11 +308,7 @@ class Autodoc {
         const url = 'https://auth.autodoc.ru/token';
         let response;
         try {
-            response = await this.functions.axios.post(url, {
-                username: account['LOGIN'],
-                password: account['PASSWORD'],
-                grant_type: 'password',
-            }, {
+            const config = {
                 headers: {
                     authorization: 'Bearer',
                     'content-type': 'application/x-www-form-urlencoded',
@@ -284,9 +316,20 @@ class Autodoc {
                     origin: 'https://www.autodoc.ru',
                     referer: 'https://www.autodoc.ru/',
                     'user-agent': this.functions.getUserAgent()
-                },
-            });
+                }
+            };
+
+            const data =  {
+                username: account['LOGIN'],
+                password: account['PASSWORD'],
+                grant_type: 'password',
+            };
+
+            response = await this.functions.axios.post(url, data, config);
+            await this.saveRefreshToken(account['LOGIN'], response.data['refresh_token'], response.data['expires_in']);
+
         } catch (e) {
+            await this.logger.log(e);
             return false;
         }
 
@@ -329,7 +372,7 @@ class Autodoc {
         const modifications = vinData['specificAttributes'];
 
         if (!primaryData) {
-            await this.logger.log(`No primary data at ${vin}`);
+            await this.logger.error(`No primary data at ${vin}`, true);
             return [];
         }
 
@@ -469,7 +512,12 @@ class Autodoc {
     getUniqueAccount() {
         const randomIndex = Math.floor(Math.random() * this.accounts.length);
         const account = this.accounts[randomIndex];
-        if (this.accounts.length > 0) {
+        if (this.accounts.length > 0)
+        {
+            if (this.accounts.length === 1)
+            {
+                return this.accounts[0];
+            }
             this.accounts.splice(randomIndex, 1);
         } else {
             return false;

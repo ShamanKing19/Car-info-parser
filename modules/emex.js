@@ -1,26 +1,30 @@
 class Emex {
     settings;
+    runningParsersCount = 0;
+    defaultPortion = 10;
 
     constructor() {
         this.functions = require('./functions');
         this.logger = require('./logger');
-        this.requestPortion = 10;
     }
 
     /**
      * Ищет предложения по номерам деталей
      *
      * @param details   {Object[]}      Массив с деталями
-     * @param portion   {int}           Максимальная порция запросов для парсера emex.ru
      * @param pBar      {GenericBar}    Progress bar
+     * @param vin       {string}        Vin номер
      * @return          {Object}        Объект, где ключ - номер детали
      */
-    async getDetailOffers(details, portion, pBar) {
+    async getDetailOffers(details, pBar, vin) {
         pBar.setTotal(details.length);
         let requests = [];
         let responses = [];
         let cycles = 1;
-        let detailsCount = 0; // Для работы циклов
+
+        // Для работы циклов
+        let detailsCount = 0;
+        const foundDetails = [];
 
         if (this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
             cycles = this.settings.SETTINGS.REPEAT_DETAIL_CYCLES;
@@ -28,17 +32,28 @@ class Emex {
 
         for (let cycle = 0; cycle < cycles; cycle++)
         {
+            let portion = Math.floor(this.defaultPortion / this.runningParsersCount);
+            portion = portion < 1 ? 1 : portion;
+
+            let cycleResponses = [];
+
             for (const detail of details)
             {
-                const detailName = detail.PART_NAME;
                 const detailNumber = detail.PART_NUMBER;
+
+                if (foundDetails.includes(detailNumber.trim())) continue;
+
                 requests.push(this.requestDetail(detailNumber, pBar));
                 detailsCount++;
                 if (requests.length >= portion) {
                     const results = await Promise.all(requests);
                     responses = responses.concat(results);
+                    cycleResponses = cycleResponses.concat(results);
                     requests = [];
+                    portion = Math.floor(this.defaultPortion / this.runningParsersCount);
+                    portion = portion < 1 ? 1 : portion;
                 }
+
                 if (
                     this.settings.DEBUG.LIMIT === 'Y'
                     && detailsCount >= this.settings.DEBUG.LIMIT_COUNT
@@ -49,9 +64,46 @@ class Emex {
 
             const results = await Promise.all(requests);
             responses = responses.concat(results);
+            cycleResponses = cycleResponses.concat(results);
+
+            let foundDetailsCount = 0;
+            for (const response of cycleResponses) {
+                if (!response) continue;
+                const data = response.data['searchResult'];
+                if (!data) continue;
+                const foundDetailNum = data['num']?.trim();
+                const foundOriginalOffers = data['originals'];
+                const foundAnalogsOffers = data['analogs'];
+                const foundReplacementsOffers = data['replacements'];
+
+                if (
+                    !foundOriginalOffers
+                    && !foundAnalogsOffers
+                    && !foundReplacementsOffers
+                ) {
+                    continue;
+                }
+
+                if (
+                    foundOriginalOffers.length === 0
+                    && foundAnalogsOffers.length === 0
+                    && foundReplacementsOffers.length === 0
+                )  {
+                    continue;
+                }
+
+                foundDetails.push(foundDetailNum);
+                foundDetailsCount++;
+            }
+
+            const notFoundDetailsCount = pBar.getTotal() - foundDetailsCount;
+            pBar.setTotal(notFoundDetailsCount);
+            await this.logger.log(`Найдено ${foundDetailsCount} в ${cycle + 1}-м цикле по ${vin}`);
 
             detailsCount = 0;
-            pBar.update(0);
+            if (cycle + 1 !== cycles) {
+                pBar.update(0);
+            }
         }
 
         const detailItemsObj = {};
@@ -155,10 +207,9 @@ class Emex {
                     }
                 }
             }
-
-            pBar.increment();
         }
 
+        this.runningParsersCount--;
         return detailItemsObj;
     }
 

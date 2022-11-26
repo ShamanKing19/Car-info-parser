@@ -73,7 +73,6 @@ class Parser {
         {
             for (const sheet in vins)
             {
-                this.emexPortion /= vins[sheet].length;
                 for (const row of vins[sheet])
                 {
                     const vin = row.VINS;
@@ -110,7 +109,10 @@ class Parser {
             // Старт со списка деталей
             const detailsRequests = [];
 
-            this.emexPortion /= Object.keys(allDetails).length;
+            // Установка изначальной порционности для emex.ru
+            for (const sheet in allDetails) {
+                this.emex.runningParsersCount++;
+            }
 
             for (const sheet in allDetails) {
                 const vin = sheet;
@@ -199,7 +201,7 @@ class Parser {
         }
 
         if (this.settings.PARSERS.EMEX === 'Y') {
-            detailsRequests.push(this.emex.getDetailOffers(details, Math.floor(this.emexPortion), pBars['EMEX']));
+            detailsRequests.push(this.emex.getDetailOffers(details, pBars['EMEX'], vin));
         }
 
         let detailsResponses = await Promise.all(detailsRequests);

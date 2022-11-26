@@ -82,11 +82,15 @@ class Parser {
                     if (this.settings.PARSERS.AUTODOC === 'Y') {
                         pBars['AUTODOC'] = multibar.create(1, 0, {
                             speed: 'N/A'
+                        }, {
+                            format: `{bar} | {percentage}% | {value}/{total} | ${vin} | autodoc.ru`,
                         });
                     }
                     if (this.settings.PARSERS.EMEX === 'Y') {
                         pBars['EMEX'] = multibar.create(1, 0, {
                             speed: 'N/A'
+                        }, {
+                            format: `{bar} | {percentage}% | {value}/{total} | ${vin} | emex.ru`,
                         });
                     }
 
@@ -116,11 +120,15 @@ class Parser {
                 if (this.settings.PARSERS.AUTODOC === 'Y') {
                     pBars['AUTODOC'] = multibar.create(1, 0, {
                         speed: 'N/A'
+                    }, {
+                        format: `{bar} | {percentage}% | {value}/{total} | ${vin} | autodoc.ru`,
                     });
                 }
                 if (this.settings.PARSERS.EMEX === 'Y') {
                     pBars['EMEX'] = multibar.create(1, 0, {
                         speed: 'N/A'
+                    }, {
+                        format: `{bar} | {percentage}% | {value}/{total} | ${vin} | emex.ru`,
                     });
                 }
                 detailsRequests.push(this.parseDetails(vin, details, pBars));
@@ -141,8 +149,8 @@ class Parser {
     /**
      * Сначала ищет набор деталей по VIN номеру, а потом предложения о покупке
      *
-     * @param vin   {string}                VIN номер
-     * @param pBars {Object<{AUTODOC:GenericBar,EMEX:GenericBar}>}    Progress bar
+     * @param vin   {string}                                           VIN номер
+     * @param pBars {Object<{AUTODOC:GenericBar, EMEX:GenericBar}>}    Progress bar
      * @returns     {Promise<{vin: {}}>}
      */
     async parseVins(vin, pBars) {
@@ -153,6 +161,7 @@ class Parser {
             vinsPbar = pBars['EMEX'];
         }
         const detailsInfo = await this.autodoc.parseVin(vin, vinsPbar);
+        await this.logger.log(`Надено ${detailsInfo.length} деталей по ${vin}`);
 
         if (this.settings.OUTPUT.CREATE_DETAILS_FILE === 'Y')
         {

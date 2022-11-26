@@ -4,7 +4,17 @@ class Logger {
     logsPath = `${this.logsDir}/log.txt`;
     errorsPath = `${this.logsDir}/error.txt`;
 
-    async log(message) {
+    constructor() {
+        this.settings = require('./settings').get();
+    }
+
+    async log(message, consoleLog = false) {
+        if (this.settings.DEBUG.LOGS !== 'Y') return;
+
+        if (consoleLog) {
+            console.log(message);
+        }
+
         if (!this.fs.existsSync(this.logsDir)) {
             await this.fs.mkdir(this.logsDir, () => {});
         }
@@ -16,8 +26,10 @@ class Logger {
         });
     }
 
-    async error(message, debug = false) {
-        if (debug) {
+    async error(message, consoleLog = false) {
+        if (this.settings.DEBUG.ERRORS !== 'Y') return;
+
+        if (consoleLog) {
             console.log(message);
         }
 

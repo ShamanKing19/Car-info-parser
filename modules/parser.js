@@ -99,8 +99,8 @@ class Parser {
 
             if (this.settings.OUTPUT.VINS_RESULT_IN_ONE_FILE === 'Y') {
                 const date = this.functions.getCurrentDate();
-                const outputDir = this.settings.OUTPUT.DIRNAME;
-                await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} VINS.xlsx`, this.vinsAndPartsObj);
+                const outputDir = this.settings.INPUT.DIRNAME;
+                await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} details.xlsx`, this.vinsAndPartsObj);
             }
         } else {
             // Старт со списка деталей
@@ -154,7 +154,7 @@ class Parser {
         }
         const detailsInfo = await this.autodoc.parseVin(vin, vinsPbar);
 
-        if (this.settings.OUTPUT.CREATE_VINS_FILE === 'Y')
+        if (this.settings.OUTPUT.CREATE_DETAILS_FILE === 'Y')
         {
             const date = this.functions.getCurrentDate();
 
@@ -163,7 +163,8 @@ class Parser {
             } else {
                 const outputList = {};
                 outputList[vin] = detailsInfo;
-                await this.functions.createXLSCFromObjectAsync(`output/${date} ${vin} details.xlsx`, outputList);
+                const outputDir = this.settings.INPUT.DIRNAME;
+                await this.functions.createXLSCFromObjectAsync(`${outputDir}/${date} ${vin} details.xlsx`, outputList);
             }
         }
 

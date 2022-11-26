@@ -3,5 +3,7 @@ node_modules/
 logs/
 input/
 output/
+examples/
+tokens/
 
 settings.ini

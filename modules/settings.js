@@ -26,7 +26,7 @@ class Settings {
 
             const defaultSettings = {
                 STARTUP: {
-                    START_FROM_VINS: "Y"
+                    START_FROM_VINS: 'Y'
                 },
                 INPUT: {
                     DIRNAME: 'input',
@@ -36,7 +36,7 @@ class Settings {
                 },
                 OUTPUT: {
                     DIRNAME: 'output',
-                    CREATE_VINS_FILE: 'Y',
+                    CREATE_DETAILS_FILE: 'Y',
                     VINS_RESULT_IN_ONE_FILE: 'N',
                     DETAILS_RESULT_IN_ONE_FILE: 'N',
                     COUNT_AVERAGE_PRICE: 'Y',

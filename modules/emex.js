@@ -18,13 +18,13 @@ class Emex {
      */
     async getDetailOffers(details, pBar, vin) {
         pBar.setTotal(details.length);
+        const detailItemsObj = {};
         let requests = [];
-        let responses = [];
         let cycles = 1;
 
         // Для работы циклов
         let detailsCount = 0;
-        const foundDetails = [];
+        const foundDetails = new Set();
 
         if (this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
             cycles = this.settings.SETTINGS.REPEAT_DETAIL_CYCLES;
@@ -41,14 +41,14 @@ class Emex {
             {
                 const detailNumber = detail.PART_NUMBER;
 
-                if (foundDetails.includes(detailNumber.trim())) continue;
+                if (foundDetails.has(detailNumber.trim())) continue;
 
                 requests.push(this.requestDetail(detailNumber, pBar));
                 detailsCount++;
                 if (requests.length >= portion) {
                     const results = await Promise.all(requests);
-                    responses = responses.concat(results);
                     cycleResponses = cycleResponses.concat(results);
+
                     requests = [];
                     portion = Math.floor(this.defaultPortion / this.runningParsersCount);
                     portion = portion < 1 ? 1 : portion;
@@ -63,37 +63,117 @@ class Emex {
             }
 
             const results = await Promise.all(requests);
-            responses = responses.concat(results);
             cycleResponses = cycleResponses.concat(results);
 
             let foundDetailsCount = 0;
-            for (const response of cycleResponses) {
+            for (const item of cycleResponses) {
+                const originalDetailNumber = item['DETAIL_NUMBER'];
+                const response = item['RESPONSE'];
+                detailItemsObj[originalDetailNumber] = {
+                    'DETAIL_NUMBER': originalDetailNumber,
+                    'DETAIL_NAME': '',
+                    'DETAIL_OFFERS': []
+                };
+
                 if (!response) continue;
                 const data = response.data['searchResult'];
                 if (!data) continue;
-                const foundDetailNum = data['num']?.trim();
-                const foundOriginalOffers = data['originals'];
-                const foundAnalogsOffers = data['analogs'];
-                const foundReplacementsOffers = data['replacements'];
 
-                if (
-                    !foundOriginalOffers
-                    && !foundAnalogsOffers
-                    && !foundReplacementsOffers
-                ) {
-                    continue;
+                const foundDetailNumber = data['num']?.trim();
+                const originalDetailName = data['name'];
+                detailItemsObj[originalDetailNumber]['DETAIL_NAME'] = originalDetailName;
+
+                const originals = data['originals'];
+                const analogs = data['analogs'];
+                const replacements = data['replacements'];
+
+                // originals - массив с одним объектом (хз чё за прикол)
+                if (Array.isArray(originals))
+                {
+                    for (const original of originals)
+                    {
+                        // Если он не найдёт деталь, то предложит похожие, можно делать доп запросы и собирать инфу ещё и по ним
+                        const offers = original['offers'];
+                        if (!Array.isArray(offers)) continue;
+                        for (const offer of offers)
+                        {
+                            const item = {
+                                'TYPE': 'original',
+                                'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
+                                'ORIGINAL_DETAIL_NAME': originalDetailName,
+                                'DETAIL_NUMBER': offer['data']['detailNum'],
+                                'DETAIL_NAME': offer['data']['detailName'],
+                                'PRICE': offer['price']['value'],
+                                'DELIVERY': offer['delivery']['value'],
+                                'QUANTITY': offer['quantity'],
+                                'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
+                            };
+
+                            if (item['DELIVERY'] < this.settings.SETTINGS.DELIVERY_LIMIT) {
+                                detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                            }
+                        }
+                    }
                 }
 
-                if (
-                    foundOriginalOffers.length === 0
-                    && foundAnalogsOffers.length === 0
-                    && foundReplacementsOffers.length === 0
-                )  {
-                    continue;
+                if (Array.isArray(analogs))
+                {
+                    for (const analog of analogs)
+                    {
+                        const offers = analog['offers'];
+                        if (!Array.isArray(offers)) continue;
+                        for (const offer of offers)
+                        {
+                            const item = {
+                                'TYPE': 'analog',
+                                'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
+                                'ORIGINAL_DETAIL_NAME': originalDetailName,
+                                'DETAIL_NUMBER': offer['data']['detailNum'],
+                                'DETAIL_NAME': offer['data']['name'],
+                                'PRICE': offer['price'] ? offer['price']['value'] : '',
+                                'DELIVERY': offer['delivery'] ? offer['price']['value'] : '',
+                                'QUANTITY': offer['quantity'],
+                                'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
+                            };
+
+                            if (item['DELIVERY'] < this.settings.SETTINGS.DELIVERY_LIMIT) {
+                                detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                            }
+                        }
+                    }
                 }
 
-                foundDetails.push(foundDetailNum);
-                foundDetailsCount++;
+                if (Array.isArray(replacements))
+                {
+                    for (const replacement of replacements)
+                    {
+                        const offers = replacement['offers'];
+                        if (!Array.isArray(offers)) continue;
+                        for (const offer of offers)
+                        {
+                            const item = {
+                                'TYPE': 'replacement',
+                                'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
+                                'ORIGINAL_DETAIL_NAME': originalDetailName,
+                                'DETAIL_NUMBER': offer['data']['detailNum'],
+                                'DETAIL_NAME': offer['data']['name'],
+                                'PRICE': offer['price']['value'],
+                                'DELIVERY': offer['delivery']['value'],
+                                'QUANTITY': offer['quantity'],
+                                'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
+                            };
+
+                            if (item['DELIVERY'] < this.settings.SETTINGS.DELIVERY_LIMIT) {
+                                detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
+                            }
+                        }
+                    }
+                }
+
+                if (detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].length !== 0) {
+                    foundDetails.add(originalDetailNumber);
+                    foundDetailsCount++;
+                }
             }
 
             const notFoundDetailsCount = pBar.getTotal() - foundDetailsCount;
@@ -103,109 +183,6 @@ class Emex {
             detailsCount = 0;
             if (cycle + 1 !== cycles) {
                 pBar.update(0);
-            }
-        }
-
-        const detailItemsObj = {};
-        for (const response of responses)
-        {
-            if (!response) continue;
-            const data = response.data['searchResult'];
-            if (!data) continue;
-
-            const originalDetailNumber = data['num'];
-            const originalDetailName = data['name'];
-
-            const originals = data['originals'];
-            const analogs = data['analogs'];
-            const replacements = data['replacements'];
-
-            detailItemsObj[originalDetailNumber] = {
-                'DETAIL_NUMBER': originalDetailNumber,
-                'DETAIL_NAME': originalDetailName,
-                'DETAIL_OFFERS': []
-            };
-
-
-            // originals - массив с одним объектом (хз чё за прикол)
-            if (Array.isArray(originals))
-            {
-                for (const original of originals)
-                {
-                    // Если он не найдёт деталь, то предложит похожие, можно делать доп запросы и собирать инфу ещё и по ним
-                    const offers = original['offers'];
-                    if (!Array.isArray(offers)) continue;
-                    for (const offer of offers)
-                    {
-                        const item = {
-                            'TYPE': 'original',
-                            'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
-                            'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['data']['detailNum'],
-                            'DETAIL_NAME': offer['data']['detailName'],
-                            'PRICE': offer['price']['value'],
-                            'DELIVERY': offer['delivery']['value'],
-                            'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
-                        };
-
-                        if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
-
-                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
-                    }
-                }
-            }
-
-            if (Array.isArray(analogs))
-            {
-                for (const analog of analogs)
-                {
-                    const offers = analog['offers'];
-                    if (!Array.isArray(offers)) continue;
-                    for (const offer of offers)
-                    {
-                        const item = {
-                            'TYPE': 'analog',
-                            'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
-                            'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['data']['detailNum'],
-                            'DETAIL_NAME': offer['data']['name'],
-                            'PRICE': offer['price'] ? offer['price']['value'] : '',
-                            'DELIVERY': offer['delivery'] ? offer['price']['value'] : '',
-                            'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
-                        };
-
-                        if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
-                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
-                    }
-                }
-            }
-
-            if (Array.isArray(replacements))
-            {
-                for (const replacement of replacements)
-                {
-                    const offers = replacement['offers'];
-                    if (!Array.isArray(offers)) continue;
-                    for (const offer of offers)
-                    {
-                        const item = {
-                            'TYPE': 'replacement',
-                            'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
-                            'ORIGINAL_DETAIL_NAME': originalDetailName,
-                            'DETAIL_NUMBER': offer['data']['detailNum'],
-                            'DETAIL_NAME': offer['data']['name'],
-                            'PRICE': offer['price']['value'],
-                            'DELIVERY': offer['delivery']['value'],
-                            'QUANTITY': offer['quantity'],
-                            'MANUFACTURER': offer['data']['makeName'] ?? offer['data']['make'],
-                        };
-
-                        if (item['DELIVERY'] > this.settings.SETTINGS.DELIVERY_LIMIT) continue;
-                        detailItemsObj[originalDetailNumber]['DETAIL_OFFERS'].push(item);
-                    }
-                }
             }
         }
 
@@ -244,7 +221,12 @@ class Emex {
 
         const response = await this.functions.tryGet(url, {headers: headers});
         pBar.increment();
-        return response;
+
+        // Мне самому плохо от этого говна, но получается только так :(
+        return {
+            'DETAIL_NUMBER': detailNumber,
+            'RESPONSE': response
+        };
     }
 
 }

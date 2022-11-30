@@ -256,7 +256,7 @@ class Parser {
                 for (const offer of detailInfo['DETAIL_OFFERS']) {
                     const type = offer['TYPE'];
                     const detailNumber = offer['DETAIL_NUMBER'];
-                    const detailName = offer['DETAIL_NAME'];
+                    const detailName = offer['DETAIL_NAME'] ?? originalDetailName;
                     const price = offer['PRICE'];
                     const delivery = offer['DELIVERY'];
                     const quantity = offer['QUANTITY'];
@@ -299,6 +299,7 @@ class Parser {
 
             let sumPrice = 0;
             let sumDelivery = 0;
+            detailInfo['DETAIL_OFFERS'] = detailInfo['DETAIL_OFFERS'].filter(item => item !== undefined);
             for (const offer of detailInfo['DETAIL_OFFERS']) {
                 sumPrice += parseInt(offer['PRICE']);
                 sumDelivery += parseInt(offer['DELIVERY']);
@@ -312,6 +313,7 @@ class Parser {
                 avgPrice = sumPrice / detailInfo['DETAIL_OFFERS'].length;
                 avgDelivery = sumDelivery / detailInfo['DETAIL_OFFERS'].length;
             } else {
+                detailName = detailInfo['DETAIL_NAME'];
                 avgPrice = 'Нет в наличии';
             }
 

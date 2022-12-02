@@ -95,6 +95,7 @@ class Parser {
                         });
                     }
                     if (this.settings.PARSERS.EMEX === 'Y') {
+                        this.emex.runningParsersCount++;
                         pBars['EMEX'] = multibar.create(1, 0, {
                             speed: 'N/A'
                         }, {
@@ -118,9 +119,11 @@ class Parser {
             // Старт со списка деталей
             const detailsRequests = [];
 
-            // Установка изначальной порционности для emex.ru
-            for (const sheet in allDetails) {
-                this.emex.runningParsersCount++;
+            if (this.settings.PARSERS.EMEX === 'Y') {
+                // Установка изначальной порционности для emex.ru
+                for (const sheet in allDetails) {
+                    this.emex.runningParsersCount++;
+                }
             }
 
             for (const sheet in allDetails) {
@@ -305,15 +308,13 @@ class Parser {
                 sumDelivery += parseInt(offer['DELIVERY']);
             }
 
-            let detailName;
+            const detailName = detailInfo['DETAIL_NAME'];
             let avgPrice = '';
             let avgDelivery = '';
             if (detailInfo['DETAIL_OFFERS'].length !== 0) {
-                detailName = detailInfo['DETAIL_NAME'];
                 avgPrice = sumPrice / detailInfo['DETAIL_OFFERS'].length;
                 avgDelivery = sumDelivery / detailInfo['DETAIL_OFFERS'].length;
             } else {
-                detailName = detailInfo['DETAIL_NAME'];
                 avgPrice = 'Нет в наличии';
             }
 

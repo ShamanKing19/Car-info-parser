@@ -69,8 +69,8 @@ class Autodoc {
                 requests.push(this.parseDetail(detail, requestHeaders, pBar));
 
                 detailItemsObj[detail] = {
-                    'DETAIL_NUMBER': detail['PART_NUMBER'],
-                    'DETAIL_NAME': detail['PART_NAME'],
+                    'DETAIL_NUMBER': detail['DETAIL_NUMBER'],
+                    'DETAIL_NAME': detail['DETAIL_NAME'],
                     'DETAIL_OFFERS': []
                 };
                 if (
@@ -107,8 +107,8 @@ class Autodoc {
 
 
     async parseDetail(detail, requestHeaders, pBar) {
-        const originalDetailNumber = detail['PART_NUMBER'];
-        const originalDetailName = detail['PART_NAME'];
+        const originalDetailNumber = detail['DETAIL_NUMBER'];
+        const originalDetailName = detail['DETAIL_NAME'];
         const clearDetailNumber = originalDetailNumber.replaceAll('-', '').replaceAll(' ', '');
 
         const manufacturerList = await this.getManufacturerInfo(clearDetailNumber);
@@ -376,7 +376,6 @@ class Autodoc {
             return [];
         }
 
-
         // TODO: Тут можно собирать инфу по разным модификациям автомобиля (пока что беру только первую)
         if (Array.isArray(modifications) && modifications.length > 0) {
             for (const item of modifications[0]['attributes']) {
@@ -475,8 +474,8 @@ class Autodoc {
                 // TODO: Выводить категорию
                 if (!uniqueParts.includes(partNumber)) {
                     const partInfo = {
-                        PART_NAME: partName,
-                        PART_NUMBER: partNumber,
+                        DETAIL_NAME: partName,
+                        DETAIL_NUMBER: partNumber,
                     };
 
                     detailsInfo.push(partInfo);

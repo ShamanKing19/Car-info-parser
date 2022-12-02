@@ -39,9 +39,9 @@ class Emex {
 
             for (const detail of details)
             {
-                const detailNumber = detail.DETAIL_NUMBER.toString();
+                const detailNumber = detail['DETAIL_NUMBER'].toString();
                 if (!detailNumber) {
-                    await this.logger.error(`Нет номера детали у ${detail.DETAIL_NAME}`);
+                    await this.logger.error(`Нет номера детали у ${detail['DETAIL_NAME']}`);
                     continue;
                 }
 

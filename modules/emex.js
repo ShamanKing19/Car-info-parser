@@ -39,7 +39,8 @@ class Emex {
 
             for (const detail of details)
             {
-                const detailNumber = detail['DETAIL_NUMBER'].toString();
+                const detailNumber = `${detail['DETAIL_NUMBER']}`
+                ;
                 if (!detailNumber) {
                     await this.logger.error(`Нет номера детали у ${detail['DETAIL_NAME']}`);
                     continue;
@@ -47,7 +48,7 @@ class Emex {
 
                 if (foundDetails.has(detailNumber.trim())) continue;
 
-                requests.push(this.requestDetail(detailNumber, pBar));
+                requests.push(this.requestDetail(detailNumber, detail['DETAIL_NAME'], pBar));
                 detailsCount++;
                 if (requests.length >= portion) {
                     const results = await Promise.all(requests);
@@ -72,10 +73,11 @@ class Emex {
             let foundDetailsCount = 0;
             for (const item of cycleResponses) {
                 const originalDetailNumber = item['DETAIL_NUMBER'];
+                const originalDetailName = item['DETAIL_NAME'];
                 const response = item['RESPONSE'];
                 detailItemsObj[originalDetailNumber] = {
                     'DETAIL_NUMBER': originalDetailNumber,
-                    'DETAIL_NAME': '',
+                    'DETAIL_NAME': originalDetailName,
                     'DETAIL_OFFERS': []
                 };
 
@@ -84,8 +86,8 @@ class Emex {
                 if (!data) continue;
 
                 const foundDetailNumber = data['num']?.trim();
-                const originalDetailName = data['name'];
-                detailItemsObj[originalDetailNumber]['DETAIL_NAME'] = originalDetailName;
+                const foundDetailName = data['name'];
+                // detailItemsObj[originalDetailNumber]['DETAIL_NAME'] = originalDetailName ?? foundDetailName;
 
                 const originals = data['originals'];
                 const analogs = data['analogs'];
@@ -199,10 +201,11 @@ class Emex {
      * Получает список предложений по запрошенной детали
      *
      * @param detailNumber {string}
+     * @param detailName {string}
      * @param pBar  {GenericBar}
      * @returns {Promise<AxiosResponse<*>|boolean>}
      */
-    async requestDetail(detailNumber, pBar) {
+    async requestDetail(detailNumber, detailName, pBar) {
         const locationIdList = [36746, 20847, 25313, 21081];
         const latitudeList = [54.7424, 54.7424, 54.6795, 54.6923, 20.6024, 54.7033];
         const longitudeList = [20.4835, 20.4838, 20.4938, 20.5102, 20.5197, 20.5114];
@@ -215,10 +218,12 @@ class Emex {
 
         const showAll = 'false'; // При true будет дохуища результатов
 
-        const url = `https://emex.ru/api/search/search2?detailNum=${encodeURIComponent(detailNumber)}&isHeaderSearch=true&showAll=${showAll}&searchString=${encodeURIComponent(detailNumber)}&locationId=${locationId}&longitude=${longitude}&latitude=${latitude}`;
+        const encodedDetailNumber = encodeURIComponent(detailNumber);
+
+        const url = `https://emex.ru/api/search/search2?detailNum=${encodedDetailNumber}&isHeaderSearch=true&showAll=${showAll}&searchString=${encodeURIComponent(detailNumber)}&locationId=${locationId}&longitude=${longitude}&latitude=${latitude}`;
         const headers = {
             'Access-Control-Allow-Origin': 'https://emex.ru',
-            'referer': `https://emex.ru/products/${detailNumber}/`,
+            'referer': `https://emex.ru/products/${encodedDetailNumber}/`,
             'host': 'emex.ru',
             'User-agent': this.functions.getUserAgent()
         };
@@ -229,6 +234,7 @@ class Emex {
         // Мне самому плохо от этого говна, но получается только так :(
         return {
             'DETAIL_NUMBER': detailNumber,
+            'DETAIL_NAME': detailName,
             'RESPONSE': response
         };
     }

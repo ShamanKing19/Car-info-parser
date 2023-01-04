@@ -4,6 +4,7 @@ class Functions {
     UserAgent = require('user-agents');
     CliProgress = require('cli-progress');
     axios = require('axios');
+    logger = require('./logger');
 
     sleepTime = 500;
 
@@ -115,7 +116,6 @@ class Functions {
                 'User-agent': this.getUserAgent(),
             };
         }
-
         return await instance.get(encodeURI(url), config);
     }
 

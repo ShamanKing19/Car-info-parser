@@ -72,13 +72,13 @@ class Parser {
         if (this.settings.STARTUP.START_FROM_VINS === 'Y')
         {
             // Установка изначальной порционности для emex.ru
-            if (this.settings.PARSERS.EMEX === 'Y') {
-                for (const sheet in vins) {
-                    for (const row of vins[sheet]) {
-                        this.emex.runningParsersCount++;
-                    }
-                }
-            }
+            // if (this.settings.PARSERS.EMEX === 'Y') {
+            //     for (const sheet in vins) {
+            //         for (const row of vins[sheet]) {
+            //             this.emex.runningParsersCount++;
+            //         }
+            //     }
+            // }
 
             for (const sheet in vins)
             {

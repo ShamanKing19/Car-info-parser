@@ -5,7 +5,7 @@ class Logger {
     errorsPath = `${this.logsDir}/error.txt`;
 
     constructor() {
-        this.settings = require('./settings').get();
+        this.settings = require('./Settings').get();
     }
 
     async log(message, consoleLog = false) {

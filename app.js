@@ -1,9 +1,9 @@
 class App {
 
     constructor() {
-        this.settings = require('./modules/settings').get();
-        this.logger = require('./modules/logger');
-        this.parser = require('./modules/parser');
+        this.settings = require('./models/Settings').get();
+        this.logger = require('./modules/Logger');
+        this.parser = require('./modules/Parser');
     }
 
 }

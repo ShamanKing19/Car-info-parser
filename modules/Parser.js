@@ -7,8 +7,8 @@ class Parser {
 
 
     constructor() {
-        this.functions = require('./functions');
-        this.logger = require('./logger');
+        this.functions = require('./Functions');
+        this.logger = require('./Logger');
     }
 
 
@@ -38,7 +38,7 @@ class Parser {
         let details = [];
 
         if (settings.STARTUP.START_FROM_VINS === 'Y') {
-            this.autodoc = require('./autodoc'); // Нахождение номеров деталей только через autodoc.ru
+            this.autodoc = require('./../parsers/Autodoc'); // Нахождение номеров деталей только через autodoc.ru
             this.autodoc.settings = settings;
             vins = await this.getVins(vinsFilePath);
         } else {
@@ -46,12 +46,12 @@ class Parser {
         }
 
         if (settings.PARSERS.AUTODOC === 'Y') {
-            this.autodoc = require('./autodoc');
+            this.autodoc = require('./../parsers/Autodoc');
             this.autodoc.settings = settings;
         }
 
         if (settings.PARSERS.EMEX === 'Y') {
-            this.emex = require('./emex');
+            this.autodoc = require('./../parsers/Emex');
             this.emex.settings = settings;
         }
 

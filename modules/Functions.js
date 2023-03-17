@@ -4,7 +4,7 @@ class Functions {
     UserAgent = require('user-agents');
     CliProgress = require('cli-progress');
     axios = require('axios');
-    logger = require('./logger');
+    logger = require('./Logger');
 
     sleepTime = 500;
 

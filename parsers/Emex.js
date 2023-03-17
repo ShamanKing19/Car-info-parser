@@ -4,8 +4,8 @@ class Emex {
     defaultPortion = 10;
 
     constructor() {
-        this.functions = require('./functions');
-        this.logger = require('./logger');
+        this.functions = require('./../modules/functions');
+        this.logger = require('./../modules/logger');
     }
 
     /**

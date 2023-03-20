@@ -1,11 +1,11 @@
 {
-  "name": "CarInfoParser",
+  "name": "car-info-parser",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
   "scripts": {
     "build": "pkg .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "bin": "app.js",
   "pkg": {
@@ -34,5 +34,8 @@
     "pkg": "^5.8.1",
     "user-agents": "^1.0.1171",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0"
   }
 }

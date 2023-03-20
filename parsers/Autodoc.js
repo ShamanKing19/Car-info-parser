@@ -1,12 +1,17 @@
-class Autodoc {
+class Autodoc
+{
+    Car = require('./../models/Car');
+    Detail = require('./../models/Detail');
     // Устанавливаются вместе с инициализацией
-    settings;
     accounts;
     tokensDir = './tokens';
 
-    constructor() {
-        this.functions = require('./../modules/functions');
-        this.logger = require('./../modules/logger');
+
+    constructor(car) {
+        this.car = car;
+        this.settings = require('./../modules/Settings');
+        this.functions = require('./../modules/Functions');
+        this.logger = require('./../modules/Logger');
     }
 
 
@@ -20,7 +25,7 @@ class Autodoc {
         const detailItemsObj = {};
         let cycles = 1;
 
-        if (this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
+        if(this.settings.SETTINGS.REPEAT_DETAIL_CYCLES > 1) {
             cycles = this.settings.SETTINGS.REPEAT_DETAIL_CYCLES;
         }
 
@@ -30,7 +35,7 @@ class Autodoc {
         let tokenData;
         while (this.accounts.length > 0 && !tokenData) {
             const account = this.getUniqueAccount();
-            if (!account) {
+            if(!account) {
                 pBar.stop();
                 break;
             }
@@ -39,17 +44,17 @@ class Autodoc {
             // const authData = await this.getRefreshToken(account['LOGIN']);
             tokenData = await this.getAuthToken(account);
 
-            if (!tokenData) {
+            if(!tokenData) {
                 await this.logger.log(`Account ${account['LOGIN']} has been banned`);
             }
 
-            if (!tokenData && this.accounts.length === 1) {
+            if(!tokenData && this.accounts.length === 1) {
                 await this.logger.error(`Не осталось рабочих аккаунтов`);
                 break;
             }
         }
 
-        if (!tokenData) {
+        if(!tokenData) {
             return;
         }
 
@@ -60,11 +65,11 @@ class Autodoc {
             'referer': 'https://www.autodoc.ru/',
         };
 
-        for (let cycle = 0; cycle < cycles; cycle++)
+        for(let cycle = 0; cycle < cycles; cycle++)
         {
             const requests = [];
 
-            for (const detail of details)
+            for(const detail of details)
             {
                 requests.push(this.parseDetail(detail, requestHeaders, pBar));
 
@@ -73,7 +78,7 @@ class Autodoc {
                     'DETAIL_NAME': detail['DETAIL_NAME'],
                     'DETAIL_OFFERS': []
                 };
-                if (
+                if(
                     this.settings.DEBUG.LIMIT === 'Y'
                     && parseInt(this.settings.DEBUG.LIMIT_COUNT) < requests.length
                 ) {
@@ -85,13 +90,13 @@ class Autodoc {
             responses = responses.concat(results);
         }
 
-        for (const response of responses) {
-            if (!response) continue;
-            for (const parsedDetail of response) {
+        for(const response of responses) {
+            if(!response) continue;
+            for(const parsedDetail of response) {
                 const originalDetailNumber = parsedDetail['ORIGINAL_DETAIL_NUMBER'];
                 const originalDetailName = parsedDetail['ORIGINAL_DETAIL_NAME'];
 
-                if (!(originalDetailNumber in detailItemsObj)) {
+                if(!(originalDetailNumber in detailItemsObj)) {
                     detailItemsObj[originalDetailNumber] = {
                         'DETAIL_NUMBER': originalDetailNumber,
                         'DETAIL_NAME': originalDetailName,
@@ -113,13 +118,13 @@ class Autodoc {
 
         const manufacturerList = await this.getManufacturerInfo(clearDetailNumber);
 
-        if (!manufacturerList || manufacturerList.length === 0) {
+        if(!manufacturerList || manufacturerList.length === 0) {
             pBar.increment();
             return false;
         }
 
         const detailsInfo = [];
-        for (const manufacturer of manufacturerList) {
+        for(const manufacturer of manufacturerList) {
             const manufacturerId = manufacturer['id'];
             const manufacturerName = manufacturer['manufacturerName'];
             const detailNumber = manufacturer['artNumber'] ?? originalDetailNumber;
@@ -130,15 +135,15 @@ class Autodoc {
             const originals = details['originals'];
             const analogs = details['analogs'];
 
-            if (originals.length === 0 && analogs.length === 0) continue;
+            if(originals.length === 0 && analogs.length === 0) continue;
 
-            if (Array.isArray(originals))
+            if(Array.isArray(originals))
             {
-                for (const offer of originals)
+                for(const offer of originals)
                 {
                     const deliveryTime = offer['deliveryDays'];
 
-                    if (parseInt(deliveryTime) > parseInt(this.settings.SETTINGS.DELIVERY_LIMIT)) {
+                    if(parseInt(deliveryTime) > parseInt(this.settings.SETTINGS.DELIVERY_LIMIT)) {
                         continue;
                     }
 
@@ -160,8 +165,8 @@ class Autodoc {
                 console.log('not array', originals);
             }
 
-            if (Array.isArray(analogs)) {
-                for (const offer of analogs) {
+            if(Array.isArray(analogs)) {
+                for(const offer of analogs) {
                     const detailInfo = {
                         'TYPE': 'original',
                         'ORIGINAL_DETAIL_NUMBER': originalDetailNumber,
@@ -182,7 +187,7 @@ class Autodoc {
         }
 
         pBar.increment();
-        if (detailsInfo.length !== 0) {
+        if(detailsInfo.length !== 0) {
             return detailsInfo;
         }
         return false;
@@ -341,9 +346,9 @@ class Autodoc {
         const url = 'https://webapi.autodoc.ru/api/captha?resource=Auth';
         const response = await this.functions.tryGet(url);
 
-        if (response) {
+        if(response) {
             const challengeGuid = response.data['challengeGuid'];
-            if (challengeGuid) {
+            if(challengeGuid) {
                 return challengeGuid;
             }
         }
@@ -354,166 +359,36 @@ class Autodoc {
     /**
      *  Ищет детали по VIN номеру
      *
-     * @param vin     {string}      VIN номер
-     * @param pBar    {GenericBar}  Progressbar из библиотеки cli-progress
-     * @returns {Promise<*[]>}      Список объектов с номером и названием детали
+     * @returns {Car} объект Car с информацией о деталях
      */
-    async parseVin(vin, pBar) {
-        const clientId = Math.floor(Math.random() * 500);
-        const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`
-
-        const vinResponse = await this.makeGetRequest(carPrimaryInfoUrl, pBar);
-        pBar.update(0);
-
-        if (!vinResponse) return [];
-
-        const vinData = vinResponse.data;
-        const primaryData = vinData['commonAttributes'];
-        const modifications = vinData['specificAttributes'];
-
-        if (!primaryData) {
-            await this.logger.error(`No primary data at ${vin}`, true);
-            return [];
+    async parseVin() {
+        const car = await this.getCarCommonInfo();
+        if(!car) {
+            return this.car;
         }
 
-        // TODO: Тут можно собирать инфу по разным модификациям автомобиля (пока что беру только первую)
-        if (Array.isArray(modifications) && modifications.length > 0) {
-            for (const item of modifications[0]['attributes']) {
-                primaryData.push(item);
-            }
+        car.categories = await this.getRawCategoryList(car);
+        if(!car.categories || car.categories.length === 0) {
+            return car;
         }
 
-        const carInfo = {};
-
-        // Формирование удобного объекта из полученных данных
-        for (const property of primaryData) {
-            carInfo[property['key']] = property['value'];
+        car.assemblyParts = await this.getAssemblyParts(car.categories);
+        if(!car.assemblyParts || car.assemblyParts.length === 0) {
+            return car;
         }
 
-        // Получение категорий автомобиля
-        const carId = carInfo['CarID'];
-        const carSsd = carInfo['Ssd'];
-        const carCatalog = carInfo['Catalog'];
-        const carModel = carInfo['Model']; // Может быть пустым
-
-        pBar.setTotal(1);
-        const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories?ssd=${carSsd}`;
-        const categoriesResponse = await this.makeGetRequest(categoriesUrl, pBar);
-        pBar.update(0);
-
-        if (!categoriesResponse) return [];
-
-        let rawCategories = categoriesResponse.data;
-
-        if ('items' in rawCategories) {
-            rawCategories = rawCategories['items'];
-        }
-
-        // Сохранение всех подкатегорий в один массив
-        const categories = this.getSubcategories(rawCategories);
-        const categoryRequests = [];
-
-        for (const category of categories) {
-            const categoryId = category['categoryId'];
-            const categorySsd = category['ssd'];
-            const categoryName = category['name'];
-
-            const sparePartInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/categories/${categoryId}/units?ssd=${categorySsd}`;
-
-            // TODO: Здесь подцеплять название категории categoryName
-            const categoryRequest = this.makeGetRequest(sparePartInfoUrl, pBar);
-            categoryRequests.push(categoryRequest);
-        }
-
-        pBar.setTotal(categories.length);
-        const categoryResponses = await Promise.all(categoryRequests);
-        pBar.update(0);
-
-        const sparePartDetailInfoRequests = [];
-        let detailsIterationCount = 0;
-
-        for (const response of categoryResponses)
-        {
-            if (!response) continue;
-            const sparePartItems = response.data['items'];
-            if (!sparePartItems) continue;
-
-            for (const sparePartItem of sparePartItems)
-            {
-                const unitId = sparePartItem['unitId'];
-                const unitSsd = sparePartItem['ssd'];
-
-                const sparePartDetailInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${carCatalog}/cars/${carId}/units/${unitId}/spareparts?ssd=${unitSsd}`;
-                const sparePartData = {'Ssd': unitSsd};
-
-                const sparePartDetailInfoRequest = this.makePostRequest(sparePartDetailInfoUrl, sparePartData, pBar);
-                sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
-                detailsIterationCount++;
-            }
-        }
-
-        pBar.setTotal(detailsIterationCount);
-        const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
-        pBar.update(0);
-
-        const uniqueParts = [];
-        const detailsInfo = [];
-
-        for (const response of sparePartDetailInfoResponses)
-        {
-            if (!response) continue;
-            const parts = response.data['items'];
-            if (!parts) continue;
-
-            for (const part of parts)
-            {
-                // TODO: Походу приходит говно с какими-то символами, которые крашат excel и не отображаются в ячейках
-                const partNumber = part['partNumber'];
-                const partName = part['name'];
-
-                // TODO: Выводить категорию
-                if (!uniqueParts.includes(partNumber)) {
-                    const partInfo = {
-                        DETAIL_NAME: partName,
-                        DETAIL_NUMBER: partNumber,
-                    };
-
-                    detailsInfo.push(partInfo);
-                    uniqueParts.push(partNumber);
-                }
-            }
-        }
-
-        return detailsInfo;
-    }
-
-    /**
-     * Рекурсивно вытаскивает все подкатегории в общий массив
-     *
-     * @param categories    Массив с объектами категорий, прилетающих с autodoc.ru
-     * @returns             Массив с категориями
-     */
-    getSubcategories(categories) {
-        let items = [];
-
-        for (const category of categories) {
-            if (category['children'].length !== 0) {
-                items = items.concat(this.getSubcategories(category['children']))
-            } else {
-                items.push(category);
-            }
-        }
-
-        return items;
+        car.details = await this.getDetails(car);
+        this.car = car;
+        return car;
     }
 
 
     getUniqueAccount() {
         const randomIndex = Math.floor(Math.random() * this.accounts.length);
         const account = this.accounts[randomIndex];
-        if (this.accounts.length > 0)
+        if(this.accounts.length > 0)
         {
-            if (this.accounts.length === 1)
+            if(this.accounts.length === 1)
             {
                 return this.accounts[0];
             }
@@ -536,18 +411,153 @@ class Autodoc {
     }
 
 
-    async makePostRequest(sparePartDetailInfoUrl, sparePartData, pBar) {
-        const response = await this.functions.tryPost(sparePartDetailInfoUrl, sparePartData);
-        pBar.increment();
-        return response;
+    async getAssemblyParts(car) {
+        const categoryRequests = [];
+
+        for(const category of car.categories) {
+            const categoryId = category['categoryId'];
+            const categorySsd = category['ssd'];
+            const sparePartUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${car.catalog}/cars/${car.id}/categories/${categoryId}/units?ssd=${categorySsd}`;
+            const categoryRequest = this.functions.tryGet(sparePartUrl);
+            categoryRequests.push(categoryRequest);
+        }
+
+        const categoryResponses = await Promise.all(categoryRequests);
+
+        const items = [];
+        for(const response of categoryResponses) {
+            if(!response) continue;
+            const sparePartItems = response.data['items'];
+            if(!sparePartItems) continue;
+
+            for(const sparePart of sparePartItems) {
+                items.push(sparePart);
+            }
+        }
+        
+        return items;
     }
 
 
-    async makeGetRequest(url, pBar, config = {}) {
-        const response = await this.functions.tryGet(url, config);
-        pBar.increment();
-        return response;
+    async getDetails(car) {
+        const sparePartDetailInfoRequests = [];
+        for(const assemblyPart of car.assemblyParts) {
+            const sparePartDetailInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${car.catalog}/cars/${car.id}/units/${assemblyPart['unitId']}/spareparts?ssd=${assemblyPart['ssd']}`;
+            const sparePartData = {'Ssd': assemblyPart.ssd};
+
+            const sparePartDetailInfoRequest = this.functions.tryPost(sparePartDetailInfoUrl, sparePartData);
+            sparePartDetailInfoRequests.push(sparePartDetailInfoRequest);
+        }
+
+        const sparePartDetailInfoResponses = await Promise.all(sparePartDetailInfoRequests);
+
+        const details = [];
+        for(const response of sparePartDetailInfoResponses) {
+            if(!response || !response.data || !response.data['items'] || response.data['items'].length === 0) {
+                continue;
+            }
+
+            for(const part of response.data['items']) {
+                // TODO: Походу приходит говно с какими-то символами, которые крашат excel и не отображаются в ячейках
+                const detail = new this.Detail(part['name'].trim(), car.vin);
+                detail.number = part['partNumber'].replace(/[\s\-_]/gmi, '');
+                if(!detail.number || detail.number === '') {
+                    continue;
+                }
+
+                details.push(detail);
+            }
+        }
+
+        return details;
+    }
+
+
+    async getRawCategoryList(car) {
+        const categoriesUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/brands/${car.catalog}/cars/${car.id}/categories?ssd=${car.ssd}`;
+        const categoriesResponse = await this.functions.tryGet(categoriesUrl);
+
+        if(!categoriesResponse) {
+            return false;
+        }
+
+        let rawCategories = categoriesResponse.data;
+
+        if('items' in rawCategories) {
+            rawCategories = rawCategories['items'];
+        }
+
+        if(!rawCategories || rawCategories.length === 0) {
+            return false;
+        }
+
+        return getSubcategories(rawCategories);
+
+        /**
+         * Рекурсивно вытаскивает все подкатегории в общий массив
+         *
+         * @param categories    Массив с объектами категорий, прилетающих с autodoc.ru
+         * @returns             Массив с категориями
+         */
+        function getSubcategories(categories) {
+            let items = [];
+
+            for(const category of categories) {
+                if(category['children'].length !== 0) {
+                    items = items.concat(getSubcategories(category['children']))
+                } else {
+                    items.push(category);
+                }
+            }
+
+            return items;
+        }
+    }
+
+
+    async getCarCommonInfo() {
+        const vin = this.car.vin;
+        const clientId = Math.floor(Math.random() * 500);
+        const carPrimaryInfoUrl = `https://catalogoriginal.autodoc.ru/api/catalogs/original/cars/${vin}/modifications?clientId=${clientId}`;
+        const response = await this.functions.tryGet(carPrimaryInfoUrl);
+        if(!response || response.status !== 200) {
+            return false;
+        }
+
+        const vinData = response.data;
+        const primaryData = vinData['commonAttributes'];
+        const modifications = vinData['specificAttributes'];
+
+        if(!primaryData) {
+            await this.logger.error(`No primary data at ${vin}`, true);
+            return false;
+        }
+
+        // TODO: Тут можно собирать инфу по разным модификациям автомобиля (пока что беру только первую)
+        if(Array.isArray(modifications) && modifications.length > 0) {
+            for(const item of modifications[0]['attributes']) {
+                primaryData.push(item);
+            }
+        }
+
+        const carInfo = {};
+        for(const property of primaryData) {
+            carInfo[property['key']] = property['value'];
+        }
+
+        const car = new this.Car(vin);
+        car.id = carInfo['CarID'];
+        car.ssd = carInfo['Ssd'];
+        car.catalog = carInfo['Catalog'];
+        car.model = carInfo['Model']; // Может быть пустым
+
+        return car;
+    }
+
+
+    setProgressBar(pBar) {
+        this.pBar = pBar;
     }
 }
 
-module.exports = new Autodoc();
+module.exports = Autodoc;

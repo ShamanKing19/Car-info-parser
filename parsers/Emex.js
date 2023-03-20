@@ -3,10 +3,18 @@ class Emex {
     runningParsersCount = 0;
     defaultPortion = 10;
 
-    constructor() {
+    constructor(car) {
+        this.car = car;
         this.functions = require('./../modules/functions');
         this.logger = require('./../modules/logger');
     }
+
+
+    // TODO: Сделать как в автодоке
+    parseVin() {
+        return this.car;
+    }
+
 
     /**
      * Ищет предложения по номерам деталей
@@ -237,6 +245,10 @@ class Emex {
             'DETAIL_NAME': detailName,
             'RESPONSE': response
         };
+    }
+
+    setProgressBar(pBar) {
+        this.pBar = pBar;
     }
 
 }

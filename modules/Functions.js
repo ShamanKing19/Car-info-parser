@@ -13,17 +13,20 @@ class Functions {
         const pathList = filepath.split('/');
         const filename = pathList.pop();
         const dirPath = pathList.join('/');
-        if (!this.fs.existsSync(dirPath)) {
+        if(!this.fs.existsSync(dirPath)) {
             await this.fs.mkdir(dirPath, {recursive: true}, () => {});
         }
-        await this.fs.writeFile(filepath, JSON.stringify(data), () => {});
+
+        await this.fs.writeFile(filepath.replace(/\.[\w\d]*/i, '') + '.json', JSON.stringify(data), () => {});
     }
 
 
     readJson(filepath) {
-        const data = this.fs.readFileSync(filepath);
-        console.log(data);
-        return JSON.parse(data);
+        if(this.fs.existsSync(filepath)) {
+            return this.fs.readFileSync(filepath).toJSON();
+        }
+
+        return false;
     }
 
 
@@ -108,10 +111,10 @@ class Functions {
      */
     async get(url, config = {}) {
         const instance = this.axios.create();
-        if (!('timeout' in config)) {
+        if(!('timeout' in config)) {
             config['timeout'] = 3000;
         }
-        if (!('headers' in config)) {
+        if(!('headers' in config)) {
             config['headers'] = {
                 'User-agent': this.getUserAgent(),
             };
@@ -130,10 +133,10 @@ class Functions {
      */
     async post(url, data, config = {}) {
         const instance = this.axios.create();
-        if (!('timeout' in config)) {
+        if(!('timeout' in config)) {
             config['timeout'] = 3000;
         }
-        if (!('headers' in config)) {
+        if(!('headers' in config)) {
             config['headers'] = {
                 'User-agent': this.getUserAgent(),
             };
@@ -146,7 +149,7 @@ class Functions {
     /**
      * Останавливает программу
      *
-     * @param ms        {int}   Количество милисекунд
+     * @param ms {int} Количество милисекунд
      * @returns void
      */
     async sleep(ms) {
@@ -155,30 +158,12 @@ class Functions {
 
 
     /**
-     * Читает первую страницу .xlsx файла и возвращает объект
-     *
-     * @param filepath  {string}  Путь до файла
-     * @returns {[Object]}   Массив с объектами
-     */
-    readXLSX(filepath) {
-        const file = this.xlsx.readFile(filepath);
-        const sheets = file.Sheets;
-
-        for (const sheetName in sheets) {
-            const sheet = sheets[sheetName];
-            return this.xlsx.utils.sheet_to_json(sheet);
-        }
-
-    }
-
-
-    /**
      * Читает .xlsx файл постранично и возвращает объект
      *
-     * @param filepath  {string}  Путь до файла
-     * @returns {[Object]}   Массив с объектами
+     * @param filepath {string} Путь до файла
+     * @returns {[Object]} Массив с объектами
      */
-    readXLSXByPage(filepath) {
+    readXLSX(filepath) {
         const file = this.xlsx.readFile(filepath);
         const sheets = file.Sheets;
         const data = [];
@@ -194,21 +179,25 @@ class Functions {
     /**
      * Создаёт .xlsx файл если его не существует из массива
      *
-     * @param filepath  {string}
-     * @param data      {array<Object>}
-     * @param sheetName {string}
+     * @param filepath {string} путь к файлу
+     * @param data {array<Object>} массив с объектами
+     * @param sheetName {string} название листа
      * @returns {Promise<void>}
      */
     // TODO: Использовать её везде кроме записи результатов парсинга
-    async createXLSXFromListAsync(filepath, data, sheetName) {
-        if (this.fs.existsSync(filepath)) return;
-        const dirs = filepath.split('/');
-        const filename = dirs.pop();
-        if (dirs.length !== 0) {
-            await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
-        }
+    async createXLSXAsync(filepath, data, sheetName) {
+        let book;
+        if(!this.fs.existsSync(filepath)) {
+            const dirs = filepath.split('/');
+            const filename = dirs.pop();
+            if(dirs.length !== 0) {
+                await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
+            }
 
-        const book = this.xlsx.utils.book_new();
+            book = this.xlsx.utils.book_new();
+        } else {
+            book = await this.xlsx.readFile(filepath);
+        }
 
         const options = {
             // type: 'buffer', // С этим тоже работает
@@ -216,10 +205,17 @@ class Functions {
             bookType: 'xlsx',
         };
 
-        const sheet = this.xlsx.utils.json_to_sheet(data);
-        this.xlsx.utils.book_append_sheet(book, sheet, sheetName);
+        if(sheetName in book.Sheets) {
+            let sheet = book.Sheets[sheetName];
+            const sheetData = this.xlsx.utils.sheet_to_json(sheet);
+            data = [...data, ...sheetData];
+            book.Sheets[sheetName] = this.xlsx.utils.json_to_sheet(data);
+        } else {
+            const sheet = this.xlsx.utils.json_to_sheet(data);
+            this.xlsx.utils.book_append_sheet(book, sheet, sheetName);
+        }
 
-        await this.xlsx.writeFileAsync(filepath, book, options, () => {});
+        await this.xlsx.writeFileAsync(filepath.replace(/\.[\w\d]*/i ,'') + '.xlsx', book, options, () => {});
     }
 
     /**
@@ -229,11 +225,11 @@ class Functions {
      * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
      */
     async createXLSCFromObjectAsync(filepath, data) {
-        if (this.fs.existsSync(filepath)) return;
+        if(this.fs.existsSync(filepath)) return;
 
         const dirs = filepath.split('/');
         const filename = dirs.pop();
-        if (dirs.length !== 0) {
+        if(dirs.length !== 0) {
             await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
         }
 
@@ -247,7 +243,7 @@ class Functions {
 
         let notEmptyPages = 0;
         for (const page in data) {
-            if (data[page].length === 0) {
+            if(data[page].length === 0) {
                 continue;
             }
             const sheet = this.xlsx.utils.json_to_sheet(data[page]);
@@ -255,7 +251,7 @@ class Functions {
             notEmptyPages++;
         }
 
-        if (notEmptyPages > 0) {
+        if(notEmptyPages > 0) {
             await this.xlsx.writeFileAsync(filepath, book, options, () => {});
         }
     }
@@ -268,11 +264,11 @@ class Functions {
      * @param data      {Object<[]>}  Ключ - название листа, значение - массив данных для записи
      */
     async createSingleXLSCFromObjectAsync(filepath, data) {
-        if (this.fs.existsSync(filepath)) return;
+        if(this.fs.existsSync(filepath)) return;
 
         const dirs = filepath.split('/');
         const filename = dirs.pop();
-        if (dirs.length !== 0) {
+        if(dirs.length !== 0) {
             await this.fs.mkdir(dirs.join('/'), {recursive: true}, () => {});
         }
 
@@ -290,7 +286,7 @@ class Functions {
             for (const vin in vins)
             {
                 const details = vins[vin];
-                if (details.length === 0) continue;
+                if(details.length === 0) continue;
                 const sheet = this.xlsx.utils.json_to_sheet(details);
                 this.xlsx.utils.book_append_sheet(book, sheet, page);
             }

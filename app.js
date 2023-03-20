@@ -1,7 +1,7 @@
 class App {
 
     constructor() {
-        this.settings = require('./models/Settings').get();
+        this.settings = require('./modules/Settings').get();
         this.logger = require('./modules/Logger');
         this.parser = require('./modules/Parser');
     }
@@ -12,6 +12,5 @@ class App {
 // TODO: Починить
 (async () => {
     const app = new App();
-    const settings = app.settings;
-    await app.parser.init(settings);
+    await app.parser.init();
 })();
